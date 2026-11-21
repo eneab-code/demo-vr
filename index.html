@@ -277,16 +277,38 @@ function spezza(t, max) {
 const matLegno = new THREE.MeshStandardMaterial({ color: 0x5a3c22, roughness: 0.6 });
 const matLegnoScuro = new THREE.MeshStandardMaterial({ color: 0x3a2614, roughness: 0.55 });
 
+/* ── forme morbide: box con bordi arrotondati (estrusione smussata) ── */
+function formaArrotondata(w, d, r) {
+  const s = new THREE.Shape(), x = -w / 2, y = -d / 2;
+  s.moveTo(x + r, y);
+  s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + d - r); s.quadraticCurveTo(x + w, y + d, x + w - r, y + d);
+  s.lineTo(x + r, y + d); s.quadraticCurveTo(x, y + d, x, y + d - r);
+  s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
+  return s;
+}
+function boxMorbido(w, h, d, r, mat) {
+  const bevel = Math.min(0.05, h / 2 - 0.002, r * 0.8);
+  const geo = new THREE.ExtrudeGeometry(formaArrotondata(w, d, r),
+    { depth: h - bevel * 2, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 3, curveSegments: 6 });
+  geo.rotateX(-Math.PI / 2); geo.computeBoundingBox(); geo.translate(0, -geo.boundingBox.min.y, 0);
+  geo.computeVertexNormals();
+  return new THREE.Mesh(geo, mat);   // base appoggiata a y=0
+}
+
 function divano(x, z, ry, colore) {
   const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g);
   const tela = new THREE.MeshStandardMaterial({ color: colore, roughness: 0.95 });
-  const base = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.4, 0.9), tela); base.position.y = 0.35; g.add(base);
-  const sedute = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.18, 0.82), tela); sedute.position.set(0, 0.56, 0.02); g.add(sedute);
-  const schienale = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.7, 0.2), tela); schienale.position.set(0, 0.75, -0.35); g.add(schienale);
-  [-1, 1].forEach(s => { const br = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.6, 0.9), tela); br.position.set(s * 0.89, 0.6, 0); g.add(br); });
-  // cuscini
-  [-0.5, 0.5].forEach(px => { const c = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.2, 0.7), new THREE.MeshStandardMaterial({ color: colore, roughness: 1 })); c.position.set(px, 0.68, 0.02); c.rotation.z = (Math.random() - .5) * .1; g.add(c); });
-  [-0.85, 0.85].forEach(px => [-0.35, 0.35].forEach(pz => { const p = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.18, 0.1), matLegnoScuro); p.position.set(px, 0.09, pz); g.add(p); }));
+  const base = boxMorbido(2.0, 0.34, 0.95, 0.14, tela); base.position.y = 0.14; g.add(base);
+  // cuscini seduta
+  [-0.5, 0.5].forEach(px => { const c = boxMorbido(0.92, 0.2, 0.82, 0.12, tela); c.position.set(px, 0.46, 0.03); g.add(c); });
+  // schienale + cuscini schienale
+  const sch = boxMorbido(2.0, 0.66, 0.22, 0.14, tela); sch.position.set(0, 0.5, -0.38); g.add(sch);
+  [-0.5, 0.5].forEach(px => { const c = boxMorbido(0.86, 0.5, 0.17, 0.12, tela); c.position.set(px, 0.64, -0.3); c.rotation.x = -0.12; g.add(c); });
+  // braccioli morbidi
+  [-1, 1].forEach(s => { const br = boxMorbido(0.26, 0.56, 0.95, 0.13, tela); br.position.set(s * 0.9, 0.2, 0); g.add(br); });
+  // piedini tornititi
+  [-0.88, 0.88].forEach(px => [-0.4, 0.4].forEach(pz => { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.035, 0.16, 10), matLegnoScuro); p.position.set(px, 0.08, pz); g.add(p); }));
   registraIngombro(g, 0.15); return g;
 }
 divano(0, 1.7, Math.PI, 0x6e7f73);     // divano nord (di fronte a noi), verde salvia
@@ -296,10 +318,11 @@ divano(-1.9, 0.3, Math.PI / 2, 0x7a6a55); // divano ovest, tortora
 function poltrona(x, z, ry, colore) {
   const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g);
   const tela = new THREE.MeshStandardMaterial({ color: colore, roughness: 0.95 });
-  g.add(mesh(new THREE.BoxGeometry(0.95, 0.4, 0.9), tela, 0, 0.35, 0));
-  g.add(mesh(new THREE.BoxGeometry(0.85, 0.16, 0.8), tela, 0, 0.55, 0.02));
-  g.add(mesh(new THREE.BoxGeometry(0.95, 0.65, 0.18), tela, 0, 0.72, -0.35));
-  [-1, 1].forEach(s => g.add(mesh(new THREE.BoxGeometry(0.18, 0.55, 0.9), tela, s * 0.46, 0.57, 0)));
+  const base = boxMorbido(0.95, 0.3, 0.9, 0.14, tela); base.position.y = 0.14; g.add(base);
+  const cus = boxMorbido(0.82, 0.2, 0.78, 0.12, tela); cus.position.set(0, 0.42, 0.02); g.add(cus);
+  const sch = boxMorbido(0.95, 0.6, 0.2, 0.14, tela); sch.position.set(0, 0.46, -0.36); g.add(sch);
+  [-1, 1].forEach(s => { const br = boxMorbido(0.2, 0.5, 0.9, 0.12, tela); br.position.set(s * 0.47, 0.18, 0); g.add(br); });
+  [-0.4, 0.4].forEach(px => [-0.38, 0.38].forEach(pz => { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.03, 0.16, 10), matLegnoScuro); p.position.set(px, 0.08, pz); g.add(p); }));
   registraIngombro(g, 0.15); return g;
 }
 poltrona(1.95, 0.5, -Math.PI / 2, 0x8a5a3c);
@@ -307,8 +330,8 @@ function mesh(geo, mat, x, y, z) { const m = new THREE.Mesh(geo, mat); m.positio
 
 /* tavolino da caffè */
 const tavolino = new THREE.Group(); tavolino.position.set(0, 0, 0.4); scene.add(tavolino);
-tavolino.add(mesh(new THREE.BoxGeometry(1.2, 0.08, 0.7), matLegno, 0, 0.42, 0));
-[[-0.5, -0.28], [0.5, -0.28], [-0.5, 0.28], [0.5, 0.28]].forEach(([gx, gz]) => tavolino.add(mesh(new THREE.BoxGeometry(0.08, 0.42, 0.08), matLegnoScuro, gx, 0.21, gz)));
+const topTav = boxMorbido(1.2, 0.08, 0.7, 0.05, matLegno); topTav.position.y = 0.42; tavolino.add(topTav);
+[[-0.5, -0.28], [0.5, -0.28], [-0.5, 0.28], [0.5, 0.28]].forEach(([gx, gz]) => tavolino.add(mesh(new THREE.CylinderGeometry(0.04, 0.03, 0.42, 10), matLegnoScuro, gx, 0.21, gz)));
 tavolino.add(mesh(new THREE.BoxGeometry(0.4, 0.04, 0.26), new THREE.MeshStandardMaterial({ color: 0x24425a, roughness: .5 }), 0.1, 0.47, 0)); // libri sul tavolino
 registraIngombro(tavolino, 0.1);
 
