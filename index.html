@@ -305,10 +305,11 @@ function libroVerticale(y, z, altezzaVano) {
   const col = coloriLibro[Math.floor(Math.random() * coloriLibro.length)];
   const g = new THREE.Group(); g.position.set(0, y + bh / 2, z);
   g.add(mesh(new THREE.BoxGeometry(d, bh, t), new THREE.MeshStandardMaterial({ color: col, roughness: 0.85 }), -d / 2 + L_D / 2 - 0.02, 0, 0));
-  // fascia chiara del titolo + due nervature, sul dorso (faccia -x)
+  // fascia chiara del titolo + due nervature, appena SPORGENTI dal dorso (-x)
+  // per evitare lo z-fighting con la faccia del libro
   const dorsoX = L_D / 2 - 0.02 - d;
-  g.add(mesh(new THREE.BoxGeometry(0.012, bh * 0.26, t * 0.82), new THREE.MeshStandardMaterial({ color: 0xd9c38a, roughness: 0.6 }), dorsoX + 0.006, bh * 0.1, 0));
-  [-bh * 0.32, bh * 0.36].forEach(oy => g.add(mesh(new THREE.BoxGeometry(0.012, 0.015, t * 0.82), new THREE.MeshStandardMaterial({ color: 0xcaa24a, metalness: .5, roughness: .4 }), dorsoX + 0.006, oy, 0)));
+  g.add(mesh(new THREE.BoxGeometry(0.01, bh * 0.26, t * 0.82), new THREE.MeshStandardMaterial({ color: 0xd9c38a, roughness: 0.6 }), dorsoX - 0.006, bh * 0.1, 0));
+  [-bh * 0.32, bh * 0.36].forEach(oy => g.add(mesh(new THREE.BoxGeometry(0.01, 0.015, t * 0.82), new THREE.MeshStandardMaterial({ color: 0xcaa24a, metalness: .5, roughness: .4 }), dorsoX - 0.006, oy, 0)));
   // leggera inclinazione occasionale
   if (Math.random() < 0.12) g.rotation.x = (Math.random() < 0.5 ? 1 : -1) * 0.08;
   libreria.add(g);
