@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<!--
+  Demo VR — "La Stanza delle Tre Luci"
+  Ambiente dimostrativo originale per visori Meta Quest 2 / 3S / 3.
+  Three.js (classico, come three@0.128) + WebXR. Nessun server.
+  Per entrare in VR la pagina va aperta su un indirizzo HTTPS
+  (es. GitHub Pages). Su PC si può provare anche con doppio clic.
+-->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>La Stanza delle Tre Luci — Demo VR</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #05060a; overflow: hidden; font-family: system-ui, Segoe UI, Roboto, sans-serif; }
+  #c { display: block; width: 100%; height: 100%; }
+  #aiuto {
+    position: fixed; left: 16px; bottom: 16px; z-index: 10;
+    max-width: 320px; color: #cdd6e4; background: rgba(10,14,22,.82);
+    border: 1px solid rgba(120,150,210,.35); border-radius: 10px;
+    padding: 12px 14px; font-size: 13px; line-height: 1.5;
+  }
+  #aiuto b { color: #9ec1ff; }
+  #aiuto .chiudi { float: right; cursor: pointer; color: #7f8aa3; margin-left: 10px; }
+  #stato {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 10;
+    color: #aebbd6; background: rgba(10,14,22,.7); border: 1px solid rgba(120,150,210,.3);
+    border-radius: 20px; padding: 6px 16px; font-size: 13px; letter-spacing: .02em; text-align: center;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="stato">Caricamento…</div>
+<div id="aiuto">
+  <span class="chiudi" onclick="this.parentNode.style.display='none'">✕</span>
+  <b>Come si gioca</b><br>
+  <b>Nel visore:</b> premi il <b>grilletto</b> puntando il pavimento per spostarti; punta un oggetto che si illumina e premi il grilletto per usarlo. La <b>levetta sinistra</b> cammina.<br>
+  <b>Su PC (anteprima):</b> trascina il mouse per guardarti intorno, <b>W A S D</b> per muoverti, <b>clic</b> per interagire.<br><br>
+  Trova le tre luci, scopri le cifre e componile sulla serratura della porta.
+</div>
+
+<!-- Three.js in versione "classica" (globale THREE), come nel gioco di Gregorio -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/webxr/VRButton.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/webxr/XRControllerModelFactory.js"></script>
+
+<script>
+const elStato = document.getElementById('stato');
+if (!window.THREE) {
+  elStato.textContent = "Impossibile caricare la grafica 3D (serve la connessione a internet).";
+} else {
+avvia();
+}
+
+function avvia() {
+
+/* ══════════════════════════════════════════
+   IMPOSTAZIONI DELL'ENIGMA (modificabili)
+   Il codice della porta è dato dalle tre luci, in ordine.
+   ══════════════════════════════════════════ */
+const CODICE = [3, 7, 1];
+const INDIZI = [
+  "La prima luce sussurra: « 3 »",
+  "La seconda luce sussurra: « 7 »",
+  "La terza luce sussurra: « 1 »"
+];
+const COLORI_LUCE = [0x4fd1c5, 0xf6ad55, 0xb794f4];
+
+/* ══════════════════════════════════════════
+   SCENA, LUCI, RENDERER
+   ══════════════════════════════════════════ */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05060a);
+scene.fog = new THREE.Fog(0x05060a, 6, 24);
+
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 100);
+
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.xr.enabled = true;
+document.body.appendChild(THREE.VRButton.createButton(renderer));
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+scene.add(new THREE.HemisphereLight(0x8899cc, 0x101018, 0.6));
+const faro = new THREE.DirectionalLight(0xffffff, 0.5);
+faro.position.set(4, 8, 2);
+scene.add(faro);
+
+const dolly = new THREE.Group();
+dolly.position.set(0, 0, 5);
+dolly.add(camera);
+camera.position.set(0, 1.6, 0);
+scene.add(dolly);
+
+/* ══════════════════════════════════════════
+   STANZA
+   ══════════════════════════════════════════ */
+const LATO = 10, ALT = 3.4, meta = LATO / 2;
+
+function texturaPavimento() {
+  const s = 256, cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const x = cv.getContext('2d');
+  x.fillStyle = '#12151f'; x.fillRect(0, 0, s, s);
+  x.strokeStyle = 'rgba(120,150,210,.18)'; x.lineWidth = 2;
+  for (let i = 0; i <= s; i += 32) {
+    x.beginPath(); x.moveTo(i, 0); x.lineTo(i, s); x.stroke();
+    x.beginPath(); x.moveTo(0, i); x.lineTo(s, i); x.stroke();
+  }
+  const t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(LATO / 2, LATO / 2);
+  return t;
+}
+
+const pavimento = new THREE.Mesh(
+  new THREE.PlaneGeometry(LATO, LATO),
+  new THREE.MeshStandardMaterial({ map: texturaPavimento(), roughness: 0.95 })
+);
+pavimento.rotation.x = -Math.PI / 2;
+scene.add(pavimento);
+
+const soffitto = new THREE.Mesh(
+  new THREE.PlaneGeometry(LATO, LATO),
+  new THREE.MeshStandardMaterial({ color: 0x0b0e16 })
+);
+soffitto.rotation.x = Math.PI / 2; soffitto.position.y = ALT;
+scene.add(soffitto);
+
+const matMuro = new THREE.MeshStandardMaterial({ color: 0x1b2030, roughness: 1 });
+function muro(w, x, z, ry, y) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, ALT, 0.2), matMuro);
+  m.position.set(x, y == null ? ALT / 2 : y, z); m.rotation.y = ry; scene.add(m);
+  return m;
+}
+muro(LATO, 0, meta, 0);
+muro(LATO, -meta, 0, Math.PI / 2);
+muro(LATO, meta, 0, Math.PI / 2);
+muro((LATO - 1.6) / 2, -(1.6 / 2 + (LATO - 1.6) / 4), -meta, 0);
+muro((LATO - 1.6) / 2,  (1.6 / 2 + (LATO - 1.6) / 4), -meta, 0);
+muro(1.6, 0, -meta, 0, ALT - 0.5);
+
+/* ══════════════════════════════════════════
+   PANNELLI DI TESTO FLOTTANTI
+   ══════════════════════════════════════════ */
+const pannelli = [];
+function pannelloTesto(testo, larghezza, colore) {
+  larghezza = larghezza || 1.2; colore = colore || '#dce6ff';
+  const w = 512, h = 256, cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const x = cv.getContext('2d');
+  const disegna = (t) => {
+    x.fillStyle = 'rgba(10,14,22,.92)'; x.fillRect(0, 0, w, h);
+    x.strokeStyle = 'rgba(120,150,210,.6)'; x.lineWidth = 6; x.strokeRect(4, 4, w - 8, h - 8);
+    x.fillStyle = colore; x.textAlign = 'center'; x.textBaseline = 'middle'; x.font = '30px system-ui, sans-serif';
+    const righe = spezza(t, 24);
+    righe.forEach((r, i) => x.fillText(r, w / 2, h / 2 - (righe.length - 1) * 20 + i * 40));
+  };
+  disegna(testo);
+  const tex = new THREE.CanvasTexture(cv);
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(larghezza, larghezza * h / w),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true })
+  );
+  mesh.userData.aggiorna = (nuovo) => { disegna(nuovo); tex.needsUpdate = true; };
+  pannelli.push(mesh);
+  return mesh;
+}
+function spezza(t, max) {
+  const parole = t.split(' '), righe = []; let r = '';
+  parole.forEach(p => { if ((r + ' ' + p).trim().length > max) { righe.push(r.trim()); r = p; } else r += ' ' + p; });
+  if (r.trim()) righe.push(r.trim());
+  return righe;
+}
+
+/* ══════════════════════════════════════════
+   OGGETTI INTERATTIVI
+   ══════════════════════════════════════════ */
+const interattivi = [];
+function rendiInteractivo(mesh, onSelect) {
+  mesh.userData.onSelect = onSelect;
+  if (mesh.material && 'emissiveIntensity' in mesh.material) mesh.userData.emBase = mesh.material.emissiveIntensity;
+  interattivi.push(mesh);
+}
+
+function creaLuce(i, x, z) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.28, 0.34, 0.9, 16),
+    new THREE.MeshStandardMaterial({ color: 0x2a3144, roughness: 0.8 })
+  );
+  base.position.y = 0.45; g.add(base);
+  const cristallo = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.22),
+    new THREE.MeshStandardMaterial({ color: COLORI_LUCE[i], emissive: COLORI_LUCE[i], emissiveIntensity: 0.25, roughness: 0.3 })
+  );
+  cristallo.position.y = 1.1; g.add(cristallo);
+  const puntoLuce = new THREE.PointLight(COLORI_LUCE[i], 0, 4);
+  puntoLuce.position.set(0, 1.1, 0); g.add(puntoLuce);
+
+  const etichetta = pannelloTesto("Luce " + (i + 1) + " — tocca per ascoltare", 0.9);
+  etichetta.position.set(0, 1.7, 0); g.add(etichetta);
+
+  let attiva = false;
+  rendiInteractivo(cristallo, () => {
+    attiva = !attiva;
+    puntoLuce.intensity = attiva ? 1.4 : 0;
+    cristallo.material.emissiveIntensity = attiva ? 1.2 : 0.25;
+    etichetta.userData.aggiorna(attiva ? INDIZI[i] : "Luce " + (i + 1) + " — tocca per ascoltare");
+    aggiornaStato(attiva ? INDIZI[i] : "");
+  });
+}
+creaLuce(0, -3.2, -1.5);
+creaLuce(1, 0, -2.2);
+creaLuce(2, 3.2, -1.5);
+
+/* ══════════════════════════════════════════
+   PORTA + SERRATURA
+   ══════════════════════════════════════════ */
+const cardine = new THREE.Group();
+cardine.position.set(-0.8, 0, -meta + 0.1);
+scene.add(cardine);
+const porta = new THREE.Mesh(
+  new THREE.BoxGeometry(1.6, ALT - 0.5, 0.14),
+  new THREE.MeshStandardMaterial({ color: 0x3a2f22, roughness: 0.7 })
+);
+porta.position.set(0.8, (ALT - 0.5) / 2, 0);
+cardine.add(porta);
+
+let portaTarget = 0, portaAperta = false;
+function apriPorta() {
+  if (portaAperta) return;
+  portaAperta = true; portaTarget = -Math.PI * 0.62;
+  aggiornaStato("La porta si apre. Oltre la soglia, la demo è completa.");
+}
+
+const inseriti = [];
+const displaySerratura = pannelloTesto("Serratura: _ _ _", 1.1, '#ffe8b0');
+displaySerratura.position.set(1.7, 1.5, -meta + 0.12);
+scene.add(displaySerratura);
+function mostraSerratura() {
+  const s = [0, 1, 2].map(i => inseriti[i] != null ? inseriti[i] : "_").join(" ");
+  displaySerratura.userData.aggiorna("Serratura: " + s);
+}
+
+function tastoNumerico(n, x, y) {
+  const m = new THREE.Mesh(
+    new THREE.BoxGeometry(0.22, 0.22, 0.06),
+    new THREE.MeshStandardMaterial({ color: 0x2b3650, emissive: 0x1a2740, emissiveIntensity: 0.2 })
+  );
+  m.position.set(x, y, -meta + 0.14); scene.add(m);
+  const et = pannelloTesto(String(n), 0.18, '#dce6ff');
+  et.position.set(x, y, -meta + 0.18); scene.add(et);
+  rendiInteractivo(m, () => {
+    if (portaAperta) return;
+    if (inseriti.length >= 3) inseriti.length = 0;
+    inseriti.push(n);
+    mostraSerratura();
+    if (inseriti.length === 3) {
+      if (inseriti[0] === CODICE[0] && inseriti[1] === CODICE[1] && inseriti[2] === CODICE[2]) {
+        setTimeout(apriPorta, 250);
+      } else {
+        aggiornaStato("Codice errato. Riprova: le luci conoscono le cifre.");
+        setTimeout(() => { inseriti.length = 0; mostraSerratura(); }, 900);
+      }
+    }
+  });
+}
+const baseX = 2.4, baseY = 2.0, passo = 0.3;
+for (let n = 0; n < 9; n++) tastoNumerico(n + 1, baseX + (n % 3) * passo, baseY - Math.floor(n / 3) * passo);
+tastoNumerico(0, baseX + passo, baseY - 3 * passo);
+
+/* ══════════════════════════════════════════
+   CONTROLLER VR
+   ══════════════════════════════════════════ */
+const tmp = new THREE.Matrix4();
+const raycaster = new THREE.Raycaster();
+const factory = new THREE.XRControllerModelFactory();
+const controller = [];
+
+function raggioMesh() {
+  const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]);
+  const linea = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x9ec1ff }));
+  linea.scale.z = 5; return linea;
+}
+for (let i = 0; i < 2; i++) {
+  const c = renderer.xr.getController(i);
+  c.add(raggioMesh());
+  c.addEventListener('selectstart', () => azioneController(c));
+  dolly.add(c); controller.push(c);
+  const grip = renderer.xr.getControllerGrip(i);
+  grip.add(factory.createControllerModel(grip));
+  dolly.add(grip);
+}
+function puntaDa(origine) {
+  tmp.identity().extractRotation(origine.matrixWorld);
+  raycaster.ray.origin.setFromMatrixPosition(origine.matrixWorld);
+  raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tmp);
+}
+function azioneController(c) {
+  puntaDa(c);
+  const hit = raycaster.intersectObjects(interattivi, false)[0];
+  if (hit && hit.distance < 6) { hit.object.userData.onSelect(); return; }
+  const suolo = raycaster.intersectObject(pavimento)[0];
+  if (suolo) teleport(suolo.point);
+}
+function teleport(punto) {
+  const cam = new THREE.Vector3(); camera.getWorldPosition(cam);
+  dolly.position.x += punto.x - cam.x;
+  dolly.position.z += punto.z - cam.z;
+  limitaDolly();
+}
+function limitaDolly() {
+  const b = meta - 0.6;
+  dolly.position.x = Math.max(-b, Math.min(b, dolly.position.x));
+  dolly.position.z = Math.max(-b, Math.min(portaAperta ? meta : b, dolly.position.z));
+}
+function muoviConLevetta(dt) {
+  const s = renderer.xr.getSession(); if (!s) return;
+  for (const src of s.inputSources) {
+    if (!src.gamepad || src.handedness !== 'left') continue;
+    const ax = src.gamepad.axes;
+    const lx = ax[2] || 0, ly = ax[3] || 0;
+    if (Math.abs(lx) < 0.15 && Math.abs(ly) < 0.15) continue;
+    const dir = new THREE.Vector3(); camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
+    const destra = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0));
+    dolly.position.addScaledVector(dir, -ly * 2.2 * dt);
+    dolly.position.addScaledVector(destra, lx * 2.2 * dt);
+    limitaDolly();
+  }
+}
+function evidenzia() {
+  interattivi.forEach(m => { if ('emBase' in m.userData) m.material.emissiveIntensity = m.userData.emBase; });
+  if (!renderer.xr.isPresenting) return;
+  controller.forEach(c => {
+    puntaDa(c);
+    const hit = raycaster.intersectObjects(interattivi, false)[0];
+    if (hit && hit.distance < 6 && 'emBase' in hit.object.userData) hit.object.material.emissiveIntensity = 1.0;
+  });
+}
+
+/* ══════════════════════════════════════════
+   CONTROLLI SU PC (anteprima)
+   ══════════════════════════════════════════ */
+let yaw = Math.PI, pitch = 0, trascina = false, mx = 0, my = 0;
+const tasti = {};
+const cvEl = renderer.domElement;
+cvEl.addEventListener('mousedown', e => { trascina = true; mx = e.clientX; my = e.clientY; });
+addEventListener('mouseup', () => trascina = false);
+addEventListener('mousemove', e => {
+  if (!trascina || renderer.xr.isPresenting) return;
+  yaw -= (e.clientX - mx) * 0.004; pitch -= (e.clientY - my) * 0.004;
+  pitch = Math.max(-1.2, Math.min(1.2, pitch)); mx = e.clientX; my = e.clientY;
+});
+addEventListener('keydown', e => tasti[e.code] = true);
+addEventListener('keyup', e => tasti[e.code] = false);
+cvEl.addEventListener('click', e => {
+  if (renderer.xr.isPresenting) return;
+  const m = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(m, camera);
+  const hit = raycaster.intersectObjects(interattivi, false)[0];
+  if (hit) hit.object.userData.onSelect();
+});
+function aggiornaPC(dt) {
+  if (renderer.xr.isPresenting) return;
+  dolly.rotation.y = yaw; camera.rotation.x = pitch;
+  const dir = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+  const destra = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+  const v = 3 * dt;
+  if (tasti['KeyW']) dolly.position.addScaledVector(dir, -v);
+  if (tasti['KeyS']) dolly.position.addScaledVector(dir, v);
+  if (tasti['KeyA']) dolly.position.addScaledVector(destra, -v);
+  if (tasti['KeyD']) dolly.position.addScaledVector(destra, v);
+  limitaDolly();
+}
+
+/* ══════════════════════════════════════════
+   STATO + CICLO DI DISEGNO
+   ══════════════════════════════════════════ */
+let timerStato;
+function aggiornaStato(t) {
+  if (!t) return;
+  elStato.textContent = t; elStato.style.display = 'block';
+  clearTimeout(timerStato);
+  timerStato = setTimeout(() => { if (!portaAperta) elStato.style.display = 'none'; }, 4000);
+}
+aggiornaStato("Trova le tre luci e componi il codice sulla porta.");
+
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  aggiornaPC(dt);
+  muoviConLevetta(dt);
+  evidenzia();
+  const camPos = new THREE.Vector3(); camera.getWorldPosition(camPos);
+  pannelli.forEach(p => p.lookAt(camPos));
+  cardine.rotation.y += (portaTarget - cardine.rotation.y) * 0.05;
+  renderer.render(scene, camera);
+});
+
+setTimeout(() => { elStato.textContent = "Pronto. Premi « ENTER VR » o esplora col mouse."; }, 600);
+
+}
+</script>
+</body>
+</html>
