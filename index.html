@@ -63,7 +63,7 @@ const INDIZI = [
    ══════════════════════════════════════════ */
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x120f0b);
-scene.fog = new THREE.Fog(0x120f0b, 8, 22);
+scene.fog = new THREE.Fog(0x120f0b, 9, 30);
 
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 100);
 
@@ -483,6 +483,82 @@ for (let n = 1; n <= 9; n++) tasto(n, ((n - 1) % 3) + 1, Math.floor((n - 1) / 3)
 tasto(0, 2, 3);
 
 /* ══════════════════════════════════════════
+   GALLERIA oltre la porta + porta finale "Sic mundus creatus est"
+   Si percorre solo dopo aver aperto la porta del salotto.
+   ══════════════════════════════════════════ */
+const CORR_LEN = 15;         // lunghezza della galleria
+const CW = 1.15;             // semi-larghezza
+const Z_PORTA = -meta;       // piano della porta del salotto
+const Z_FONDO = Z_PORTA - CORR_LEN;
+
+const matGalleria = new THREE.MeshStandardMaterial({ color: 0x2a2a34, roughness: 0.9 });
+const matCornice = new THREE.MeshStandardMaterial({ color: 0x1a1a20, roughness: 0.6 });
+const matRunner = new THREE.MeshStandardMaterial({ color: 0x5a1f22, roughness: 1 });
+
+// pavimento, tappeto-passatoia, soffitto
+scene.add(mesh(new THREE.BoxGeometry(CW * 2, 0.04, CORR_LEN), new THREE.MeshStandardMaterial({ map: texParquet(), roughness: .8 }), 0, 0, Z_PORTA - CORR_LEN / 2));
+scene.add(mesh(new THREE.BoxGeometry(1.2, 0.02, CORR_LEN - 0.4), matRunner, 0, 0.03, Z_PORTA - CORR_LEN / 2));
+scene.add(mesh(new THREE.BoxGeometry(CW * 2, 0.04, CORR_LEN), new THREE.MeshStandardMaterial({ color: 0x15151c }), 0, ALT, Z_PORTA - CORR_LEN / 2));
+// pareti laterali
+[-1, 1].forEach(s => scene.add(mesh(new THREE.BoxGeometry(0.12, ALT, CORR_LEN), matGalleria, s * CW, ALT / 2, Z_PORTA - CORR_LEN / 2)));
+
+// quadri lungo le pareti + applique luminose
+const coloriQuadro = [0x3a5a6a, 0x6a3a4a, 0x4a5a3a, 0x6a5a2a, 0x3a3a5a, 0x5a2f3a];
+function quadroGalleria(z, lato) {
+  const g = new THREE.Group(); g.position.set(lato * (CW - 0.08), 1.55, z); g.rotation.y = -lato * Math.PI / 2; scene.add(g);
+  const w = 0.7 + Math.random() * 0.3, h = 0.55 + Math.random() * 0.35;
+  g.add(mesh(new THREE.BoxGeometry(w + 0.1, h + 0.1, 0.05), matCornice, 0, 0, 0));
+  g.add(mesh(new THREE.BoxGeometry(w + 0.16, h + 0.16, 0.03), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .6, roughness: .4 }), 0, 0, -0.015));
+  g.add(mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ color: coloriQuadro[Math.floor(Math.random() * coloriQuadro.length)], roughness: .9 }), 0, 0, 0.03));
+  // faretto
+  const sp = new THREE.SpotLight(0xfff1d0, 0.8, 4, 0.7, 0.5);
+  sp.position.set(0, 1.0, 0.4); sp.target = g; scene.add(sp.target); g.add(sp);
+}
+let zq = Z_PORTA - 1.6;
+while (zq > Z_FONDO + 1.2) { quadroGalleria(zq, -1); quadroGalleria(zq - 0.9, 1); zq -= 2.4; }
+
+// luci calde a soffitto lungo il percorso
+for (let z = Z_PORTA - 2; z > Z_FONDO + 0.5; z -= 3) {
+  const pl = new THREE.PointLight(0xffe3b0, 0.5, 6); pl.position.set(0, ALT - 0.3, z); scene.add(pl);
+  scene.add(mesh(new THREE.SphereGeometry(0.08, 10, 10), new THREE.MeshStandardMaterial({ color: 0xfff0cc, emissive: 0xffd98a, emissiveIntensity: 0.9 }), 0, ALT - 0.25, z));
+}
+
+// parete di fondo con la porta finale
+scene.add(mesh(new THREE.BoxGeometry(CW * 2 + 0.3, ALT, 0.2), matGalleria, 0, ALT / 2, Z_FONDO));
+// targa con l'iscrizione, sopra la porta
+const targa = pannelloTesto("Sic mundus creatus est", 1.9, '#e8cf94', true, 56);
+targa.position.set(0, 2.5, Z_FONDO + 0.12); scene.add(targa);
+scene.add(mesh(new THREE.BoxGeometry(2.0, 0.5, 0.04), matCornice, 0, 2.5, Z_FONDO + 0.1));
+scene.add(mesh(new THREE.BoxGeometry(2.06, 0.56, 0.02), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .6, roughness: .4 }), 0, 2.5, Z_FONDO + 0.08));
+targa.position.z = Z_FONDO + 0.13;
+
+// porta finale a due ante, con bagliore dietro
+const cardineFin = new THREE.Group(); cardineFin.position.set(0, 0, Z_FONDO + 0.08); scene.add(cardineFin);
+const antaFinMat = new THREE.MeshStandardMaterial({ color: 0x2b2b33, roughness: 0.5, metalness: 0.2 });
+const antaSx = new THREE.Group(); antaSx.position.set(-0.72, 0, 0); cardineFin.add(antaSx);
+antaSx.add(mesh(new THREE.BoxGeometry(0.72, 2.2, 0.08), antaFinMat, 0.36, 1.1, 0));
+antaSx.add(mesh(new THREE.BoxGeometry(0.5, 0.9, 0.03), matCornice, 0.36, 1.5, 0.05));
+antaSx.add(mesh(new THREE.BoxGeometry(0.5, 0.6, 0.03), matCornice, 0.36, 0.6, 0.05));
+const antaDx = new THREE.Group(); antaDx.position.set(0.72, 0, 0); cardineFin.add(antaDx);
+antaDx.add(mesh(new THREE.BoxGeometry(0.72, 2.2, 0.08), antaFinMat, -0.36, 1.1, 0));
+antaDx.add(mesh(new THREE.BoxGeometry(0.5, 0.9, 0.03), matCornice, -0.36, 1.5, 0.05));
+antaDx.add(mesh(new THREE.BoxGeometry(0.5, 0.6, 0.03), matCornice, -0.36, 0.6, 0.05));
+// maniglioni
+antaSx.add(mesh(new THREE.BoxGeometry(0.05, 0.3, 0.06), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .8, roughness: .3 }), 0.64, 1.1, 0.08));
+antaDx.add(mesh(new THREE.BoxGeometry(0.05, 0.3, 0.06), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .8, roughness: .3 }), -0.64, 1.1, 0.08));
+// bagliore dietro la porta
+const voidGlow = mesh(new THREE.PlaneGeometry(1.5, 2.2), new THREE.MeshBasicMaterial({ color: 0xfff6e0 }), 0, 1.1, Z_FONDO - 0.2); scene.add(voidGlow);
+const luceVoid = new THREE.PointLight(0xfff3d6, 0, 6); luceVoid.position.set(0, 1.3, Z_FONDO - 0.5); scene.add(luceVoid);
+
+let finTarget = 0, finAperta = false;
+const zonaFin = mesh(new THREE.BoxGeometry(1.5, 2.2, 0.12), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.001 }), 0, 1.1, Z_FONDO + 0.1); scene.add(zonaFin);
+rendiInteractivo(zonaFin, () => {
+  finAperta = !finAperta; finTarget = finAperta ? 1 : 0;
+  luceVoid.intensity = finAperta ? 2.2 : 0;
+  aggiornaStato(finAperta ? "Sic mundus creatus est." : "");
+});
+
+/* ══════════════════════════════════════════
    CONTROLLER VR
    ══════════════════════════════════════════ */
 const tmp = new THREE.Matrix4();
@@ -519,16 +595,22 @@ function teleport(p) {
 }
 function risolviPos() {
   const b = meta - 0.5;
-  dolly.position.x = Math.max(-b, Math.min(b, dolly.position.x));
-  dolly.position.z = Math.max(-b, Math.min(portaAperta ? meta + 1 : b, dolly.position.z));
+  let x = dolly.position.x, z = dolly.position.z;
+  const boxes = [{ x0: -b, x1: b, z0: -b, z1: b }];
+  if (portaAperta) boxes.push({ x0: -0.7, x1: 0.7, z0: Z_FONDO + 0.5, z1: -b + 0.35 });
+  const dentro = boxes.some(B => x > B.x0 && x < B.x1 && z > B.z0 && z < B.z1);
+  if (!dentro) {
+    let best = [x, z], bd = 1e9;
+    boxes.forEach(B => { const cx = Math.max(B.x0, Math.min(B.x1, x)), cz = Math.max(B.z0, Math.min(B.z1, z)); const d = (cx - x) * (cx - x) + (cz - z) * (cz - z); if (d < bd) { bd = d; best = [cx, cz]; } });
+    x = best[0]; z = best[1];
+  }
   ingombri.forEach(r => {
-    const px = dolly.position.x, pz = dolly.position.z;
-    if (px > r.minX && px < r.maxX && pz > r.minZ && pz < r.maxZ) {
-      const dL = px - r.minX, dR = r.maxX - px, dU = pz - r.minZ, dD = r.maxZ - pz, mn = Math.min(dL, dR, dU, dD);
-      if (mn === dL) dolly.position.x = r.minX; else if (mn === dR) dolly.position.x = r.maxX;
-      else if (mn === dU) dolly.position.z = r.minZ; else dolly.position.z = r.maxZ;
+    if (x > r.minX && x < r.maxX && z > r.minZ && z < r.maxZ) {
+      const dL = x - r.minX, dR = r.maxX - x, dU = z - r.minZ, dD = r.maxZ - z, mn = Math.min(dL, dR, dU, dD);
+      if (mn === dL) x = r.minX; else if (mn === dR) x = r.maxX; else if (mn === dU) z = r.minZ; else z = r.maxZ;
     }
   });
+  dolly.position.x = x; dolly.position.z = z;
 }
 function muoviConLevetta(dt) {
   const s = renderer.xr.getSession(); if (!s) return;
@@ -591,6 +673,9 @@ renderer.setAnimationLoop(() => {
   const t = performance.now() * 0.001;
   fiamme.forEach(f => { const tr = f.base * (0.85 + 0.15 * Math.sin(t * 8 + f.seme)); f.mat.emissiveIntensity = tr; if (f.luce) f.luce.intensity = f.luceBase; });
   cardine.rotation.y += (portaTarget - cardine.rotation.y) * 0.05;
+  antaSx.rotation.y += ((finAperta ? -Math.PI * 0.5 : 0) - antaSx.rotation.y) * 0.05;
+  antaDx.rotation.y += ((finAperta ? Math.PI * 0.5 : 0) - antaDx.rotation.y) * 0.05;
+  voidGlow.material.opacity = 0.3 + 0.2 * Math.sin(performance.now() * 0.002);
   renderer.render(scene, camera);
 });
 setTimeout(() => { elStato.textContent = "Pronto. Premi « ENTRA IN VR » o esplora col mouse."; }, 600);
