@@ -71,9 +71,25 @@ const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'),
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const MAXANI = renderer.capabilities.getMaxAnisotropy();
 renderer.xr.enabled = true;
 try { renderer.xr.setReferenceSpaceType('local-floor'); } catch (e) {}
 creaBottoneVR(renderer);
+
+/* riflessi ambientali morbidi (image-based lighting) da un gradiente caldo */
+function ambienteRiflessi() {
+  const cv = document.createElement('canvas'); cv.width = 16; cv.height = 64;
+  const x = cv.getContext('2d'); const g = x.createLinearGradient(0, 0, 0, 64);
+  g.addColorStop(0, '#8a8294'); g.addColorStop(0.5, '#43383a'); g.addColorStop(1, '#17120c');
+  x.fillStyle = g; x.fillRect(0, 0, 16, 64);
+  const tex = new THREE.CanvasTexture(cv); tex.mapping = THREE.EquirectangularReflectionMapping;
+  const pm = new THREE.PMREMGenerator(renderer); const env = pm.fromEquirectangular(tex).texture;
+  pm.dispose(); tex.dispose(); return env;
+}
 
 function creaBottoneVR(renderer) {
   const b = document.createElement('button');
@@ -103,9 +119,16 @@ addEventListener('resize', () => {
 });
 
 /* luce ambientale calda da salotto */
-scene.add(new THREE.HemisphereLight(0xfff0d6, 0x2a211a, 0.55));
-const sole = new THREE.DirectionalLight(0xffe9c4, 0.45);
+scene.environment = ambienteRiflessi();
+scene.add(new THREE.HemisphereLight(0xfff0d6, 0x2a211a, 0.5));
+const sole = new THREE.DirectionalLight(0xffe9c4, 0.7);
 sole.position.set(5, 7, 3); scene.add(sole);
+sole.castShadow = true;
+sole.shadow.mapSize.set(1024, 1024);
+sole.shadow.camera.near = 0.5; sole.shadow.camera.far = 24;
+sole.shadow.camera.left = -7; sole.shadow.camera.right = 7;
+sole.shadow.camera.top = 7; sole.shadow.camera.bottom = -7;
+sole.shadow.bias = -0.0006; sole.shadow.radius = 3;
 
 const dolly = new THREE.Group();
 dolly.position.set(0, 0, 3.4);
@@ -129,7 +152,7 @@ function texParquet() {
       x.strokeStyle = 'rgba(30,18,8,.5)'; x.lineWidth = 1; x.strokeRect(xx + off, yy + 1, 126, doga - 2);
     }
   }
-  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 3);
+  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 3); t.anisotropy = MAXANI;
   return t;
 }
 function texTappeto() {
@@ -141,7 +164,7 @@ function texTappeto() {
   x.fillStyle = '#caa24a';
   for (let i = 48; i < s - 40; i += 40) { rombo(x, i, s / 2, 10); rombo(x, s / 2, i, 10); }
   function rombo(c, cx, cy, r) { c.beginPath(); c.moveTo(cx, cy - r); c.lineTo(cx + r, cy); c.lineTo(cx, cy + r); c.lineTo(cx - r, cy); c.closePath(); c.fill(); }
-  return new THREE.CanvasTexture(cv);
+  const t = new THREE.CanvasTexture(cv); t.anisotropy = MAXANI; return t;
 }
 function texParete() {
   // carta da parati: fondo caldo, strisce verticali tono su tono, motivo a rombi
@@ -155,7 +178,7 @@ function texParete() {
     x.beginPath(); x.arc(xx, yy, 2.5, 0, 7); x.fillStyle = 'rgba(214,184,124,0.3)'; x.fill();
   }
   for (let i = 0; i < 1400; i++) { x.fillStyle = 'rgba(0,0,0,' + (Math.random() * .03) + ')'; x.fillRect(Math.random() * s, Math.random() * s, 1, 1); }
-  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 1.4);
+  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 1.4); t.anisotropy = MAXANI;
   return t;
 }
 
@@ -690,6 +713,14 @@ let timerStato;
 function aggiornaStato(t) { if (!t) return; elStato.textContent = t; elStato.style.display = 'block'; clearTimeout(timerStato); timerStato = setTimeout(() => { if (!portaAperta) elStato.style.display = 'none'; }, 4000); }
 aggiornaStato("Accendi le tre lampade e componi il codice sul tastierino della porta.");
 mostraSerratura();
+
+/* ombre: solo i solidi (MeshStandard) le proiettano e ricevono;
+   pannelli di testo, zone-click e bagliori (MeshBasic) sono esclusi */
+scene.traverse(o => {
+  if (!o.isMesh) return;
+  if (o.material && o.material.isMeshStandardMaterial) { o.castShadow = true; o.receiveShadow = true; }
+});
+pavimento.receiveShadow = true; pavimento.castShadow = false;
 
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
