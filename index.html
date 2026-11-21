@@ -213,7 +213,7 @@ function registraIngombro(obj, m) {
   ingombri.push({ minX: b.min.x - m, maxX: b.max.x + m, minZ: b.min.z - m, maxZ: b.max.z + m });
 }
 
-function pannelloTesto(testo, larghezza, colore) {
+function pannelloTesto(testo, larghezza, colore, fisso) {
   larghezza = larghezza || 1.2; colore = colore || '#f3ead8';
   const w = 512, h = 256, cv = document.createElement('canvas'); cv.width = w; cv.height = h;
   const x = cv.getContext('2d');
@@ -230,7 +230,8 @@ function pannelloTesto(testo, larghezza, colore) {
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(larghezza, larghezza * h / w),
     new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
   mesh.userData.aggiorna = (nuovo) => { disegna(nuovo); tex.needsUpdate = true; };
-  pannelli.push(mesh); return mesh;
+  if (!fisso) pannelli.push(mesh);   // "fisso" = etichetta piatta che NON gira verso il giocatore
+  return mesh;
 }
 function roundRect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
 function spezza(t, max) {
@@ -397,21 +398,22 @@ const inseriti = [];
 const pannelloKp = new THREE.Group();
 pannelloKp.position.set(varco / 2 + 0.55, 1.35, -meta + 0.12); scene.add(pannelloKp);
 // piastra
-pannelloKp.add(mesh(new THREE.BoxGeometry(0.78, 1.15, 0.05), new THREE.MeshStandardMaterial({ color: 0x2b2017, roughness: .5 }), 0, 0, 0));
-pannelloKp.add(mesh(new THREE.BoxGeometry(0.82, 1.19, 0.03), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .6, roughness: .4 }), 0, 0, -0.02));
-// display
-const display = pannelloTesto("_ _ _", 0.62, '#ffe8a8');
-display.position.set(0, 0.42, 0.045); display.scale.set(1, 0.9, 1); pannelloKp.add(display);
+pannelloKp.add(mesh(new THREE.BoxGeometry(0.8, 1.3, 0.05), new THREE.MeshStandardMaterial({ color: 0x2b2017, roughness: .5 }), 0, 0, 0));
+pannelloKp.add(mesh(new THREE.BoxGeometry(0.84, 1.34, 0.03), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .6, roughness: .4 }), 0, 0, -0.02));
+// display (etichetta fissa, non ruota verso il giocatore)
+const display = pannelloTesto("_ _ _", 0.6, '#ffe8a8', true);
+display.position.set(0, 0.44, 0.045); display.scale.set(1, 0.85, 1); pannelloKp.add(display);
 function mostraSerratura() {
   display.userData.aggiorna([0, 1, 2].map(i => inseriti[i] != null ? inseriti[i] : "_").join("  "));
 }
 
+/* griglia centrata: colonne -0.23/0/0.23, righe dall'alto verso il basso */
 function tasto(n, col, riga) {
-  const bx = (col - 1) * 0.23, by = 0.08 - riga * 0.23;
-  const m = mesh(new THREE.BoxGeometry(0.19, 0.19, 0.06),
-    new THREE.MeshStandardMaterial({ color: 0x3a4660, emissive: 0x111b30, emissiveIntensity: 0.3, roughness: .5 }), bx, by, 0.055);
+  const bx = (col - 2) * 0.23, by = 0.22 - riga * 0.22;
+  const m = mesh(new THREE.BoxGeometry(0.18, 0.18, 0.05),
+    new THREE.MeshStandardMaterial({ color: 0x3a4660, emissive: 0x111b30, emissiveIntensity: 0.3, roughness: .5 }), bx, by, 0.05);
   pannelloKp.add(m);
-  const et = pannelloTesto(String(n), 0.14, '#eaf0ff'); et.position.set(bx, by, 0.09); pannelloKp.add(et);
+  const et = pannelloTesto(String(n), 0.13, '#eaf0ff', true); et.position.set(bx, by, 0.085); pannelloKp.add(et);
   rendiInteractivo(m, () => {
     if (portaAperta) return;
     if (inseriti.length >= 3) inseriti.length = 0;
