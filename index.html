@@ -144,10 +144,18 @@ function texTappeto() {
   return new THREE.CanvasTexture(cv);
 }
 function texParete() {
-  const s = 128, cv = document.createElement('canvas'); cv.width = cv.height = s;
-  const x = cv.getContext('2d'); x.fillStyle = '#4a3f33'; x.fillRect(0, 0, s, s);
-  for (let i = 0; i < 1800; i++) { x.fillStyle = 'rgba(255,240,210,' + (Math.random() * .04) + ')'; x.fillRect(Math.random() * s, Math.random() * s, 1, 1); }
-  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 1);
+  // carta da parati: fondo caldo, strisce verticali tono su tono, motivo a rombi
+  const s = 256, cv = document.createElement('canvas'); cv.width = cv.height = s;
+  const x = cv.getContext('2d');
+  x.fillStyle = '#7a6348'; x.fillRect(0, 0, s, s);
+  for (let i = 0; i < s; i += 16) { x.fillStyle = (i / 16) % 2 ? 'rgba(255,240,210,0.045)' : 'rgba(0,0,0,0.05)'; x.fillRect(i, 0, 8, s); }
+  x.strokeStyle = 'rgba(214,184,124,0.22)'; x.lineWidth = 2;
+  for (let yy = 0; yy <= s; yy += 64) for (let xx = 0; xx <= s; xx += 64) {
+    x.beginPath(); x.moveTo(xx, yy - 13); x.lineTo(xx + 13, yy); x.lineTo(xx, yy + 13); x.lineTo(xx - 13, yy); x.closePath(); x.stroke();
+    x.beginPath(); x.arc(xx, yy, 2.5, 0, 7); x.fillStyle = 'rgba(214,184,124,0.3)'; x.fill();
+  }
+  for (let i = 0; i < 1400; i++) { x.fillStyle = 'rgba(0,0,0,' + (Math.random() * .03) + ')'; x.fillRect(Math.random() * s, Math.random() * s, 1, 1); }
+  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 1.4);
   return t;
 }
 
@@ -167,7 +175,7 @@ soffitto.rotation.x = Math.PI / 2;
 soffitto.position.y = ALT;
 scene.add(soffitto);
 
-const matParete = new THREE.MeshStandardMaterial({ map: texParete(), color: 0x8a7256, roughness: 1 });
+const matParete = new THREE.MeshStandardMaterial({ map: texParete(), color: 0xffffff, roughness: 1 });
 const matBattiscopa = new THREE.MeshStandardMaterial({ color: 0xe9e2d2, roughness: 0.6 });
 function parete(w, x, z, ry, y) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, ALT, 0.2), matParete);
@@ -523,37 +531,39 @@ for (let z = Z_PORTA - 2; z > Z_FONDO + 0.5; z -= 3) {
   scene.add(mesh(new THREE.SphereGeometry(0.08, 10, 10), new THREE.MeshStandardMaterial({ color: 0xfff0cc, emissive: 0xffd98a, emissiveIntensity: 0.9 }), 0, ALT - 0.25, z));
 }
 
-// parete di fondo
+// parete di fondo, con l'ISCRIZIONE sul muro (si vede quando la porta si apre)
 scene.add(mesh(new THREE.BoxGeometry(CW * 2 + 0.3, ALT, 0.2), matGalleria, 0, ALT / 2, Z_FONDO));
-// stipite della porta finale
-[-1, 1].forEach(s => scene.add(mesh(new THREE.BoxGeometry(0.1, 2.3, 0.24), matCornice, s * 0.82, 1.15, Z_FONDO + 0.04)));
-scene.add(mesh(new THREE.BoxGeometry(1.74, 0.12, 0.24), matCornice, 0, 2.3, Z_FONDO + 0.04));
+// lastra scura + cornice dorata sul muro
+scene.add(mesh(new THREE.BoxGeometry(1.3, 0.78, 0.03), new THREE.MeshStandardMaterial({ color: 0x14140f, roughness: .6 }), 0, 1.4, Z_FONDO + 0.11));
+scene.add(mesh(new THREE.BoxGeometry(1.42, 0.9, 0.02), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .6, roughness: .4 }), 0, 1.4, Z_FONDO + 0.1));
+// iscrizione sul muro (fissa), su due righe
+const iscr = pannelloTesto("Sic mundus\ncreatus est", 1.2, '#e8cf94', true, 56);
+iscr.position.set(0, 1.4, Z_FONDO + 0.13); scene.add(iscr);
+// faretto che illumina l'iscrizione: acceso solo quando la porta è aperta
+const luceIscr = new THREE.SpotLight(0xfff1d0, 0, 7, 0.8, 0.6);
+luceIscr.position.set(0, 2.7, Z_FONDO + 1.4);
+const mira = new THREE.Object3D(); mira.position.set(0, 1.4, Z_FONDO); scene.add(mira);
+luceIscr.target = mira; scene.add(luceIscr);
 
-// porta finale a battente unico, con l'iscrizione incisa sull'anta
-const cardineFin = new THREE.Group(); cardineFin.position.set(-0.75, 0, Z_FONDO + 0.1); scene.add(cardineFin);
-const antaFinMat = new THREE.MeshStandardMaterial({ color: 0x2b2b33, roughness: 0.5, metalness: 0.2 });
+// stipite
+[-1, 1].forEach(s => scene.add(mesh(new THREE.BoxGeometry(0.1, 2.3, 0.26), matCornice, s * 0.82, 1.15, Z_FONDO + 0.18)));
+scene.add(mesh(new THREE.BoxGeometry(1.74, 0.12, 0.26), matCornice, 0, 2.3, Z_FONDO + 0.18));
+
+// porta finale a battente unico, SENZA scritta, davanti al muro
+const cardineFin = new THREE.Group(); cardineFin.position.set(-0.75, 0, Z_FONDO + 0.24); scene.add(cardineFin);
+const antaFinMat = new THREE.MeshStandardMaterial({ color: 0x3a2c1a, roughness: 0.55 });
 const antaFin = mesh(new THREE.BoxGeometry(1.5, 2.2, 0.08), antaFinMat, 0.75, 1.1, 0); cardineFin.add(antaFin);
-// riquadri decorativi incassati, sopra e sotto l'iscrizione
-cardineFin.add(mesh(new THREE.BoxGeometry(1.1, 0.5, 0.03), matCornice, 0.75, 1.78, 0.05));
-cardineFin.add(mesh(new THREE.BoxGeometry(1.1, 0.5, 0.03), matCornice, 0.75, 0.5, 0.05));
-// cornice dell'iscrizione al centro dell'anta
-cardineFin.add(mesh(new THREE.BoxGeometry(1.2, 0.34, 0.03), new THREE.MeshStandardMaterial({ color: 0x14140f, roughness: .6 }), 0.75, 1.15, 0.05));
-cardineFin.add(mesh(new THREE.BoxGeometry(1.26, 0.4, 0.02), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .6, roughness: .4 }), 0.75, 1.15, 0.045));
-// iscrizione, fissa sull'anta (si muove con la porta), su due righe
-const iscr = pannelloTesto("Sic mundus\ncreatus est", 1.1, '#e8cf94', true, 54);
-iscr.position.set(0.75, 1.15, 0.07); cardineFin.add(iscr);
+// riquadri incassati decorativi
+cardineFin.add(mesh(new THREE.BoxGeometry(1.1, 0.85, 0.03), matLegnoScuro, 0.75, 1.5, 0.05));
+cardineFin.add(mesh(new THREE.BoxGeometry(1.1, 0.6, 0.03), matLegnoScuro, 0.75, 0.55, 0.05));
 // maniglione
 cardineFin.add(mesh(new THREE.BoxGeometry(0.05, 0.32, 0.06), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .8, roughness: .3 }), 1.4, 1.1, 0.08));
 
-// bagliore dietro la porta
-const voidGlow = mesh(new THREE.PlaneGeometry(1.5, 2.2), new THREE.MeshBasicMaterial({ color: 0xfff6e0, transparent: true }), 0, 1.1, Z_FONDO - 0.2); scene.add(voidGlow);
-const luceVoid = new THREE.PointLight(0xfff3d6, 0, 6); luceVoid.position.set(0, 1.3, Z_FONDO - 0.5); scene.add(luceVoid);
-
 let finAperta = false;
-const zonaFin = mesh(new THREE.BoxGeometry(1.5, 2.2, 0.12), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.001 }), 0, 1.1, Z_FONDO + 0.12); scene.add(zonaFin);
+const zonaFin = mesh(new THREE.BoxGeometry(1.5, 2.2, 0.12), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.001 }), 0, 1.1, Z_FONDO + 0.26); scene.add(zonaFin);
 rendiInteractivo(zonaFin, () => {
   finAperta = !finAperta;
-  luceVoid.intensity = finAperta ? 2.2 : 0;
+  luceIscr.intensity = finAperta ? 1.8 : 0;
   aggiornaStato(finAperta ? "Sic mundus creatus est." : "");
 });
 
@@ -672,8 +682,7 @@ renderer.setAnimationLoop(() => {
   const t = performance.now() * 0.001;
   fiamme.forEach(f => { const tr = f.base * (0.85 + 0.15 * Math.sin(t * 8 + f.seme)); f.mat.emissiveIntensity = tr; if (f.luce) f.luce.intensity = f.luceBase; });
   cardine.rotation.y += (portaTarget - cardine.rotation.y) * 0.05;
-  cardineFin.rotation.y += ((finAperta ? -Math.PI * 0.55 : 0) - cardineFin.rotation.y) * 0.05;
-  voidGlow.material.opacity = 0.35 + 0.2 * Math.sin(performance.now() * 0.002);
+  cardineFin.rotation.y += ((finAperta ? -Math.PI * 0.62 : 0) - cardineFin.rotation.y) * 0.05;
   renderer.render(scene, camera);
 });
 setTimeout(() => { elStato.textContent = "Pronto. Premi « ENTRA IN VR » o esplora col mouse."; }, 600);
