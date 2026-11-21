@@ -166,6 +166,7 @@ const pavimento = new THREE.Mesh(
   new THREE.MeshStandardMaterial({ map: texParquet(), roughness: 0.75, metalness: 0.0 })
 );
 pavimento.rotation.x = -Math.PI / 2; scene.add(pavimento);
+const pavimenti = [pavimento];   // tutte le superfici calpestabili (per il teletrasporto in VR)
 
 const soffitto = new THREE.Mesh(
   new THREE.PlaneGeometry(LATO, LATO),
@@ -504,7 +505,8 @@ const matCornice = new THREE.MeshStandardMaterial({ color: 0x1a1a20, roughness: 
 const matRunner = new THREE.MeshStandardMaterial({ color: 0x5a1f22, roughness: 1 });
 
 // pavimento, tappeto-passatoia, soffitto
-scene.add(mesh(new THREE.BoxGeometry(CW * 2, 0.04, CORR_LEN), new THREE.MeshStandardMaterial({ map: texParquet(), roughness: .8 }), 0, 0, Z_PORTA - CORR_LEN / 2));
+const pavCorr = mesh(new THREE.BoxGeometry(CW * 2, 0.04, CORR_LEN), new THREE.MeshStandardMaterial({ map: texParquet(), roughness: .8 }), 0, 0, Z_PORTA - CORR_LEN / 2);
+scene.add(pavCorr); pavimenti.push(pavCorr);   // calpestabile anche il corridoio
 scene.add(mesh(new THREE.BoxGeometry(1.2, 0.02, CORR_LEN - 0.4), matRunner, 0, 0.03, Z_PORTA - CORR_LEN / 2));
 scene.add(mesh(new THREE.BoxGeometry(CW * 2, 0.04, CORR_LEN), new THREE.MeshStandardMaterial({ color: 0x15151c }), 0, ALT, Z_PORTA - CORR_LEN / 2));
 // pareti laterali
@@ -595,7 +597,7 @@ function azioneController(c) {
   puntaDa(c);
   const hit = raycaster.intersectObjects(interattivi, false)[0];
   if (hit && hit.distance < 6) { hit.object.userData.onSelect(); return; }
-  const suolo = raycaster.intersectObject(pavimento)[0];
+  const suolo = raycaster.intersectObjects(pavimenti, false)[0];
   if (suolo) teleport(suolo.point);
 }
 function teleport(p) {
