@@ -41,10 +41,10 @@
   Trova le tre luci, scopri le cifre e componile sulla serratura della porta.
 </div>
 
-<!-- Three.js in versione "classica" (globale THREE), come nel gioco di Gregorio -->
+<!-- Three.js in versione "classica" (globale THREE), come nel gioco di Gregorio.
+     Il bottone VR e la gestione dei controller sono scritti a mano qui sotto,
+     senza file aggiuntivi: dipendiamo solo dalla libreria principale. -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/webxr/VRButton.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/webxr/XRControllerModelFactory.js"></script>
 
 <script>
 const elStato = document.getElementById('stato');
@@ -81,7 +81,32 @@ const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'),
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.xr.enabled = true;
-document.body.appendChild(THREE.VRButton.createButton(renderer));
+try { renderer.xr.setReferenceSpaceType('local-floor'); } catch (e) {}
+creaBottoneVR(renderer);
+
+/* bottone "Entra in VR" costruito a mano con l'API WebXR (niente file extra) */
+function creaBottoneVR(renderer) {
+  const b = document.createElement('button');
+  b.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:20;' +
+    'padding:12px 22px;font:15px system-ui,sans-serif;letter-spacing:.06em;cursor:pointer;' +
+    'color:#dce6ff;background:#1b2540;border:1px solid #6f8ad0;border-radius:8px;';
+  b.textContent = 'VR…'; document.body.appendChild(b);
+  if (!('xr' in navigator)) { b.textContent = 'VR non supportata da questo browser'; b.disabled = true; return; }
+  navigator.xr.isSessionSupported('immersive-vr').then(ok => {
+    if (!ok) { b.textContent = 'Apri questa pagina nel visore per la VR'; b.disabled = true; return; }
+    b.textContent = 'ENTRA IN VR';
+    b.onclick = entra;
+  }).catch(() => { b.textContent = 'VR non disponibile'; b.disabled = true; });
+  async function entra() {
+    try {
+      const session = await navigator.xr.requestSession('immersive-vr',
+        { optionalFeatures: ['local-floor', 'bounded-floor'] });
+      await renderer.xr.setSession(session);
+      b.textContent = 'ESCI DALLA VR'; b.onclick = () => session.end();
+      session.addEventListener('end', () => { b.textContent = 'ENTRA IN VR'; b.onclick = entra; });
+    } catch (e) { b.textContent = 'Avvio VR non riuscito — riprova'; }
+  }
+}
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -282,7 +307,6 @@ tastoNumerico(0, baseX + passo, baseY - 3 * passo);
    ══════════════════════════════════════════ */
 const tmp = new THREE.Matrix4();
 const raycaster = new THREE.Raycaster();
-const factory = new THREE.XRControllerModelFactory();
 const controller = [];
 
 function raggioMesh() {
@@ -296,7 +320,10 @@ for (let i = 0; i < 2; i++) {
   c.addEventListener('selectstart', () => azioneController(c));
   dolly.add(c); controller.push(c);
   const grip = renderer.xr.getControllerGrip(i);
-  grip.add(factory.createControllerModel(grip));
+  grip.add(new THREE.Mesh(
+    new THREE.BoxGeometry(0.05, 0.05, 0.14),
+    new THREE.MeshStandardMaterial({ color: 0x3a4660, emissive: 0x20304f, emissiveIntensity: 0.4 })
+  ));
   dolly.add(grip);
 }
 function puntaDa(origine) {
