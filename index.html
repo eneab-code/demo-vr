@@ -331,15 +331,19 @@ function vaso(y, z) {
   return 0.14;
 }
 
+const ripianoConDeco = Math.floor(Math.random() * ripianiY.length);   // un solo ripiano con un decoro
 for (let r = 0; r < ripianiY.length; r++) {
   const y = ripianiY[r] + 0.02, vano = (ripianiY[r + 1] || L_H - 0.1) - ripianiY[r];
-  let z = -L_L / 2 + 0.08;
-  let messoDeco = false;
-  while (z < L_L / 2 - 0.1) {
-    const rnd = Math.random();
-    if (!messoDeco && rnd < 0.14 && z < L_L / 2 - 0.35) { z += pilaOrizzontale(y, z + 0.14) + 0.1; messoDeco = true; }
-    else if (!messoDeco && rnd < 0.2 && z < L_L / 2 - 0.2) { z += vaso(y, z + 0.08) + 0.14; messoDeco = true; }
-    else z += libroVerticale(y, z, vano) + 0.006;
+  let z = -L_L / 2 + 0.07;
+  let decoFatto = false;
+  while (z < L_L / 2 - 0.08) {
+    const spazio = (L_L / 2 - 0.08) - z;
+    if (r === ripianoConDeco && !decoFatto && spazio > 0.6 && z > -0.2 && Math.random() < 0.5) {
+      z += (Math.random() < 0.5 ? pilaOrizzontale(y, z + 0.14) + 0.1 : vaso(y, z + 0.08) + 0.14);
+      decoFatto = true;
+    } else {
+      z += libroVerticale(y, z, vano) + 0.005;
+    }
   }
 }
 registraIngombro(libreria, 0.1);
