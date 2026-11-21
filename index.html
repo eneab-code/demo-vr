@@ -3,29 +3,28 @@
 <head>
 <meta charset="UTF-8">
 <!--
-  Demo VR — "La Stanza delle Tre Luci"
+  Demo VR — "Il Salotto delle Tre Luci"
   Ambiente dimostrativo originale per visori Meta Quest 2 / 3S / 3.
-  Three.js (classico, come three@0.128) + WebXR. Nessun server.
-  Per entrare in VR la pagina va aperta su un indirizzo HTTPS
-  (es. GitHub Pages). Su PC si può provare anche con doppio clic.
+  Three.js (classico, three@0.128) + WebXR. Nessun file aggiuntivo.
+  Per la VR va aperto su un indirizzo HTTPS (GitHub Pages).
 -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>La Stanza delle Tre Luci — Demo VR</title>
+<title>Il Salotto delle Tre Luci — Demo VR</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100%; background: #05060a; overflow: hidden; font-family: system-ui, Segoe UI, Roboto, sans-serif; }
+  html, body { height: 100%; background: #0b0a08; overflow: hidden; font-family: system-ui, Segoe UI, Roboto, sans-serif; }
   #c { display: block; width: 100%; height: 100%; }
   #aiuto {
     position: fixed; left: 16px; bottom: 16px; z-index: 10;
-    max-width: 320px; color: #cdd6e4; background: rgba(10,14,22,.82);
-    border: 1px solid rgba(120,150,210,.35); border-radius: 10px;
+    max-width: 320px; color: #efe6d6; background: rgba(28,22,16,.82);
+    border: 1px solid rgba(190,160,110,.4); border-radius: 10px;
     padding: 12px 14px; font-size: 13px; line-height: 1.5;
   }
-  #aiuto b { color: #9ec1ff; }
-  #aiuto .chiudi { float: right; cursor: pointer; color: #7f8aa3; margin-left: 10px; }
+  #aiuto b { color: #e6c88a; }
+  #aiuto .chiudi { float: right; cursor: pointer; color: #b7a585; margin-left: 10px; }
   #stato {
     position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 10;
-    color: #aebbd6; background: rgba(10,14,22,.7); border: 1px solid rgba(120,150,210,.3);
+    color: #efe6d6; background: rgba(28,22,16,.72); border: 1px solid rgba(190,160,110,.35);
     border-radius: 20px; padding: 6px 16px; font-size: 13px; letter-spacing: .02em; text-align: center;
   }
 </style>
@@ -38,72 +37,61 @@
   <b>Come si gioca</b><br>
   <b>Nel visore:</b> premi il <b>grilletto</b> puntando il pavimento per spostarti; punta un oggetto che si illumina e premi il grilletto per usarlo. La <b>levetta sinistra</b> cammina.<br>
   <b>Su PC (anteprima):</b> trascina il mouse per guardarti intorno, <b>W A S D</b> per muoverti, <b>clic</b> per interagire.<br><br>
-  Trova le tre luci, scopri le cifre e componile sulla serratura della porta.
+  Accendi le tre lampade, scopri le cifre e componile sul tastierino della porta.
 </div>
 
-<!-- Three.js in versione "classica" (globale THREE), come nel gioco di Gregorio.
-     Il bottone VR e la gestione dei controller sono scritti a mano qui sotto,
-     senza file aggiuntivi: dipendiamo solo dalla libreria principale. -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-
 <script>
 const elStato = document.getElementById('stato');
-if (!window.THREE) {
-  elStato.textContent = "Impossibile caricare la grafica 3D (serve la connessione a internet).";
-} else {
-avvia();
-}
+if (!window.THREE) { elStato.textContent = "Impossibile caricare la grafica 3D (serve la connessione a internet)."; }
+else { avvia(); }
 
 function avvia() {
 
 /* ══════════════════════════════════════════
-   IMPOSTAZIONI DELL'ENIGMA (modificabili)
-   Il codice della porta è dato dalle tre luci, in ordine.
+   ENIGMA (modificabile)
    ══════════════════════════════════════════ */
 const CODICE = [3, 7, 1];
 const INDIZI = [
-  "La prima luce sussurra: « 3 »",
-  "La seconda luce sussurra: « 7 »",
-  "La terza luce sussurra: « 1 »"
+  "La lampada di ottone si accende e mostra « 3 »",
+  "La lampada di ceramica si accende e mostra « 7 »",
+  "La piantana nell'angolo si accende e mostra « 1 »"
 ];
-const COLORI_LUCE = [0x4fd1c5, 0xf6ad55, 0xb794f4];
 
 /* ══════════════════════════════════════════
-   SCENA, LUCI, RENDERER
+   SCENA / RENDERER
    ══════════════════════════════════════════ */
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x05060a);
-scene.fog = new THREE.Fog(0x05060a, 6, 24);
+scene.background = new THREE.Color(0x120f0b);
+scene.fog = new THREE.Fog(0x120f0b, 8, 22);
 
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 100);
 
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.xr.enabled = true;
 try { renderer.xr.setReferenceSpaceType('local-floor'); } catch (e) {}
 creaBottoneVR(renderer);
 
-/* bottone "Entra in VR" costruito a mano con l'API WebXR (niente file extra) */
 function creaBottoneVR(renderer) {
   const b = document.createElement('button');
   b.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:20;' +
     'padding:12px 22px;font:15px system-ui,sans-serif;letter-spacing:.06em;cursor:pointer;' +
-    'color:#dce6ff;background:#1b2540;border:1px solid #6f8ad0;border-radius:8px;';
+    'color:#efe6d6;background:#3a2c1a;border:1px solid #c9a24a;border-radius:8px;';
   b.textContent = 'VR…'; document.body.appendChild(b);
   if (!('xr' in navigator)) { b.textContent = 'VR non supportata da questo browser'; b.disabled = true; return; }
   navigator.xr.isSessionSupported('immersive-vr').then(ok => {
     if (!ok) { b.textContent = 'Apri questa pagina nel visore per la VR'; b.disabled = true; return; }
-    b.textContent = 'ENTRA IN VR';
-    b.onclick = entra;
+    b.textContent = 'ENTRA IN VR'; b.onclick = entra;
   }).catch(() => { b.textContent = 'VR non disponibile'; b.disabled = true; });
   async function entra() {
     try {
-      const session = await navigator.xr.requestSession('immersive-vr',
-        { optionalFeatures: ['local-floor', 'bounded-floor'] });
-      await renderer.xr.setSession(session);
-      b.textContent = 'ESCI DALLA VR'; b.onclick = () => session.end();
-      session.addEventListener('end', () => { b.textContent = 'ENTRA IN VR'; b.onclick = entra; });
+      const s = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor'] });
+      await renderer.xr.setSession(s);
+      b.textContent = 'ESCI DALLA VR'; b.onclick = () => s.end();
+      s.addEventListener('end', () => { b.textContent = 'ENTRA IN VR'; b.onclick = entra; });
     } catch (e) { b.textContent = 'Avvio VR non riuscito — riprova'; }
   }
 }
@@ -114,150 +102,284 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
-scene.add(new THREE.HemisphereLight(0x8899cc, 0x101018, 0.6));
-const faro = new THREE.DirectionalLight(0xffffff, 0.5);
-faro.position.set(4, 8, 2);
-scene.add(faro);
+/* luce ambientale calda da salotto */
+scene.add(new THREE.HemisphereLight(0xfff0d6, 0x2a211a, 0.55));
+const sole = new THREE.DirectionalLight(0xffe9c4, 0.45);
+sole.position.set(5, 7, 3); scene.add(sole);
 
 const dolly = new THREE.Group();
-dolly.position.set(0, 0, 5);
+dolly.position.set(0, 0, 3.4);
 dolly.add(camera);
 camera.position.set(0, 1.6, 0);
 scene.add(dolly);
 
 /* ══════════════════════════════════════════
-   STANZA
+   MATERIALI E TEXTURE
    ══════════════════════════════════════════ */
-const LATO = 10, ALT = 3.4, meta = LATO / 2;
-
-function texturaPavimento() {
-  const s = 256, cv = document.createElement('canvas');
-  cv.width = cv.height = s;
+function texParquet() {
+  const w = 256, h = 256, cv = document.createElement('canvas'); cv.width = w; cv.height = h;
   const x = cv.getContext('2d');
-  x.fillStyle = '#12151f'; x.fillRect(0, 0, s, s);
-  x.strokeStyle = 'rgba(120,150,210,.18)'; x.lineWidth = 2;
-  for (let i = 0; i <= s; i += 32) {
-    x.beginPath(); x.moveTo(i, 0); x.lineTo(i, s); x.stroke();
-    x.beginPath(); x.moveTo(0, i); x.lineTo(s, i); x.stroke();
+  const toni = ['#6b4a2e', '#7a5636', '#5f4228', '#734f30'];
+  const doga = 32;
+  for (let yy = 0; yy < h; yy += doga) {
+    const off = ((yy / doga) % 2) * 64;
+    for (let xx = -64; xx < w; xx += 128) {
+      x.fillStyle = toni[Math.floor(Math.random() * toni.length)];
+      x.fillRect(xx + off, yy + 1, 126, doga - 2);
+      x.strokeStyle = 'rgba(30,18,8,.5)'; x.lineWidth = 1; x.strokeRect(xx + off, yy + 1, 126, doga - 2);
+    }
   }
-  const t = new THREE.CanvasTexture(cv);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(LATO / 2, LATO / 2);
+  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 3);
+  return t;
+}
+function texTappeto() {
+  const s = 256, cv = document.createElement('canvas'); cv.width = cv.height = s;
+  const x = cv.getContext('2d');
+  x.fillStyle = '#7d2b24'; x.fillRect(0, 0, s, s);
+  x.strokeStyle = '#caa24a'; x.lineWidth = 10; x.strokeRect(14, 14, s - 28, s - 28);
+  x.strokeStyle = '#e9d7a8'; x.lineWidth = 3; x.strokeRect(30, 30, s - 60, s - 60);
+  x.fillStyle = '#caa24a';
+  for (let i = 48; i < s - 40; i += 40) { rombo(x, i, s / 2, 10); rombo(x, s / 2, i, 10); }
+  function rombo(c, cx, cy, r) { c.beginPath(); c.moveTo(cx, cy - r); c.lineTo(cx + r, cy); c.lineTo(cx, cy + r); c.lineTo(cx - r, cy); c.closePath(); c.fill(); }
+  return new THREE.CanvasTexture(cv);
+}
+function texParete() {
+  const s = 128, cv = document.createElement('canvas'); cv.width = cv.height = s;
+  const x = cv.getContext('2d'); x.fillStyle = '#4a3f33'; x.fillRect(0, 0, s, s);
+  for (let i = 0; i < 1800; i++) { x.fillStyle = 'rgba(255,240,210,' + (Math.random() * .04) + ')'; x.fillRect(Math.random() * s, Math.random() * s, 1, 1); }
+  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 1);
   return t;
 }
 
+const LATO = 8.4, ALT = 3.0, meta = LATO / 2;
+
 const pavimento = new THREE.Mesh(
   new THREE.PlaneGeometry(LATO, LATO),
-  new THREE.MeshStandardMaterial({ map: texturaPavimento(), roughness: 0.95 })
+  new THREE.MeshStandardMaterial({ map: texParquet(), roughness: 0.75, metalness: 0.0 })
 );
-pavimento.rotation.x = -Math.PI / 2;
-scene.add(pavimento);
+pavimento.rotation.x = -Math.PI / 2; scene.add(pavimento);
 
-const soffitto = new THREE.Mesh(
+scene.add(new THREE.Mesh(
   new THREE.PlaneGeometry(LATO, LATO),
-  new THREE.MeshStandardMaterial({ color: 0x0b0e16 })
-);
-soffitto.rotation.x = Math.PI / 2; soffitto.position.y = ALT;
-scene.add(soffitto);
+  new THREE.MeshStandardMaterial({ color: 0xece2d0, roughness: 1 })
+)).rotation.x = Math.PI / 2;
+scene.children[scene.children.length - 1].position.y = ALT;
 
-const matMuro = new THREE.MeshStandardMaterial({ color: 0x1b2030, roughness: 1 });
-function muro(w, x, z, ry, y) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, ALT, 0.2), matMuro);
+const matParete = new THREE.MeshStandardMaterial({ map: texParete(), color: 0x8a7256, roughness: 1 });
+const matBattiscopa = new THREE.MeshStandardMaterial({ color: 0xe9e2d2, roughness: 0.6 });
+function parete(w, x, z, ry, y) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, ALT, 0.2), matParete);
   m.position.set(x, y == null ? ALT / 2 : y, z); m.rotation.y = ry; scene.add(m);
+  // battiscopa
+  const b = new THREE.Mesh(new THREE.BoxGeometry(w, 0.16, 0.24), matBattiscopa);
+  b.position.set(x, 0.08, z); b.rotation.y = ry; scene.add(b);
   return m;
 }
-muro(LATO, 0, meta, 0);
-muro(LATO, -meta, 0, Math.PI / 2);
-muro(LATO, meta, 0, Math.PI / 2);
-muro((LATO - 1.6) / 2, -(1.6 / 2 + (LATO - 1.6) / 4), -meta, 0);
-muro((LATO - 1.6) / 2,  (1.6 / 2 + (LATO - 1.6) / 4), -meta, 0);
-muro(1.6, 0, -meta, 0, ALT - 0.5);
+parete(LATO, 0, meta, 0);
+parete(LATO, -meta, 0, Math.PI / 2);
+parete(LATO, meta, 0, Math.PI / 2);
+// parete nord con varco porta (largo 1.5)
+const varco = 1.5;
+parete((LATO - varco) / 2, -(varco / 2 + (LATO - varco) / 4), -meta, 0);
+parete((LATO - varco) / 2,  (varco / 2 + (LATO - varco) / 4), -meta, 0);
+const sopraPorta = new THREE.Mesh(new THREE.BoxGeometry(varco + 0.2, ALT - 2.2, 0.2), matParete);
+sopraPorta.position.set(0, 2.2 + (ALT - 2.2) / 2, -meta); scene.add(sopraPorta);
+
+/* tappeto centrale */
+const tappeto = new THREE.Mesh(
+  new THREE.BoxGeometry(3.6, 0.02, 2.6),
+  new THREE.MeshStandardMaterial({ map: texTappeto(), roughness: 1 })
+);
+tappeto.position.set(0, 0.012, 0.4); scene.add(tappeto);
 
 /* ══════════════════════════════════════════
-   PANNELLI DI TESTO FLOTTANTI
+   OGGETTI INTERATTIVI + COLLISIONI
    ══════════════════════════════════════════ */
+const interattivi = [];
 const pannelli = [];
+const fiamme = [];
+const ingombri = [];
+function rendiInteractivo(mesh, onSelect) {
+  mesh.userData.onSelect = onSelect;
+  if (mesh.material && 'emissiveIntensity' in mesh.material) mesh.userData.emBase = mesh.material.emissiveIntensity;
+  interattivi.push(mesh);
+}
+function registraIngombro(obj, m) {
+  m = m == null ? 0.25 : m;
+  obj.updateMatrixWorld(true);
+  const b = new THREE.Box3().setFromObject(obj);
+  ingombri.push({ minX: b.min.x - m, maxX: b.max.x + m, minZ: b.min.z - m, maxZ: b.max.z + m });
+}
+
 function pannelloTesto(testo, larghezza, colore) {
-  larghezza = larghezza || 1.2; colore = colore || '#dce6ff';
-  const w = 512, h = 256, cv = document.createElement('canvas');
-  cv.width = w; cv.height = h;
+  larghezza = larghezza || 1.2; colore = colore || '#f3ead8';
+  const w = 512, h = 256, cv = document.createElement('canvas'); cv.width = w; cv.height = h;
   const x = cv.getContext('2d');
   const disegna = (t) => {
-    x.fillStyle = 'rgba(10,14,22,.92)'; x.fillRect(0, 0, w, h);
-    x.strokeStyle = 'rgba(120,150,210,.6)'; x.lineWidth = 6; x.strokeRect(4, 4, w - 8, h - 8);
+    x.clearRect(0, 0, w, h);
+    x.fillStyle = 'rgba(28,22,16,.92)'; roundRect(x, 6, 6, w - 12, h - 12, 18); x.fill();
+    x.strokeStyle = 'rgba(201,162,74,.7)'; x.lineWidth = 6; roundRect(x, 6, 6, w - 12, h - 12, 18); x.stroke();
     x.fillStyle = colore; x.textAlign = 'center'; x.textBaseline = 'middle'; x.font = '30px system-ui, sans-serif';
     const righe = spezza(t, 24);
     righe.forEach((r, i) => x.fillText(r, w / 2, h / 2 - (righe.length - 1) * 20 + i * 40));
   };
   disegna(testo);
   const tex = new THREE.CanvasTexture(cv);
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(larghezza, larghezza * h / w),
-    new THREE.MeshBasicMaterial({ map: tex, transparent: true })
-  );
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(larghezza, larghezza * h / w),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
   mesh.userData.aggiorna = (nuovo) => { disegna(nuovo); tex.needsUpdate = true; };
-  pannelli.push(mesh);
-  return mesh;
+  pannelli.push(mesh); return mesh;
 }
+function roundRect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
 function spezza(t, max) {
-  const parole = t.split(' '), righe = []; let r = '';
-  parole.forEach(p => { if ((r + ' ' + p).trim().length > max) { righe.push(r.trim()); r = p; } else r += ' ' + p; });
-  if (r.trim()) righe.push(r.trim());
-  return righe;
+  const p = t.split(' '), r = []; let l = '';
+  p.forEach(w => { if ((l + ' ' + w).trim().length > max) { r.push(l.trim()); l = w; } else l += ' ' + w; });
+  if (l.trim()) r.push(l.trim()); return r;
 }
+
+/* ── MOBILI ── */
+const matLegno = new THREE.MeshStandardMaterial({ color: 0x5a3c22, roughness: 0.6 });
+const matLegnoScuro = new THREE.MeshStandardMaterial({ color: 0x3a2614, roughness: 0.55 });
+
+function divano(x, z, ry, colore) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g);
+  const tela = new THREE.MeshStandardMaterial({ color: colore, roughness: 0.95 });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.4, 0.9), tela); base.position.y = 0.35; g.add(base);
+  const sedute = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.18, 0.82), tela); sedute.position.set(0, 0.56, 0.02); g.add(sedute);
+  const schienale = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.7, 0.2), tela); schienale.position.set(0, 0.75, -0.35); g.add(schienale);
+  [-1, 1].forEach(s => { const br = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.6, 0.9), tela); br.position.set(s * 0.89, 0.6, 0); g.add(br); });
+  // cuscini
+  [-0.5, 0.5].forEach(px => { const c = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.2, 0.7), new THREE.MeshStandardMaterial({ color: colore, roughness: 1 })); c.position.set(px, 0.68, 0.02); c.rotation.z = (Math.random() - .5) * .1; g.add(c); });
+  [-0.85, 0.85].forEach(px => [-0.35, 0.35].forEach(pz => { const p = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.18, 0.1), matLegnoScuro); p.position.set(px, 0.09, pz); g.add(p); }));
+  registraIngombro(g, 0.15); return g;
+}
+divano(0, 1.7, Math.PI, 0x6e7f73);     // divano nord (di fronte a noi), verde salvia
+divano(-1.9, 0.3, Math.PI / 2, 0x7a6a55); // divano ovest, tortora
+
+/* poltrona */
+function poltrona(x, z, ry, colore) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g);
+  const tela = new THREE.MeshStandardMaterial({ color: colore, roughness: 0.95 });
+  g.add(mesh(new THREE.BoxGeometry(0.95, 0.4, 0.9), tela, 0, 0.35, 0));
+  g.add(mesh(new THREE.BoxGeometry(0.85, 0.16, 0.8), tela, 0, 0.55, 0.02));
+  g.add(mesh(new THREE.BoxGeometry(0.95, 0.65, 0.18), tela, 0, 0.72, -0.35));
+  [-1, 1].forEach(s => g.add(mesh(new THREE.BoxGeometry(0.18, 0.55, 0.9), tela, s * 0.46, 0.57, 0)));
+  registraIngombro(g, 0.15); return g;
+}
+poltrona(1.95, 0.5, -Math.PI / 2, 0x8a5a3c);
+function mesh(geo, mat, x, y, z) { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); return m; }
+
+/* tavolino da caffè */
+const tavolino = new THREE.Group(); tavolino.position.set(0, 0, 0.4); scene.add(tavolino);
+tavolino.add(mesh(new THREE.BoxGeometry(1.2, 0.08, 0.7), matLegno, 0, 0.42, 0));
+[[-0.5, -0.28], [0.5, -0.28], [-0.5, 0.28], [0.5, 0.28]].forEach(([gx, gz]) => tavolino.add(mesh(new THREE.BoxGeometry(0.08, 0.42, 0.08), matLegnoScuro, gx, 0.21, gz)));
+tavolino.add(mesh(new THREE.BoxGeometry(0.4, 0.04, 0.26), new THREE.MeshStandardMaterial({ color: 0x24425a, roughness: .5 }), 0.1, 0.47, 0)); // libri sul tavolino
+registraIngombro(tavolino, 0.1);
+
+/* libreria a parete est */
+const libreria = new THREE.Group(); libreria.position.set(meta - 0.26, 0, -1.4); scene.add(libreria);
+libreria.add(mesh(new THREE.BoxGeometry(0.4, 2.3, 1.8), matLegnoScuro, 0, 1.15, 0));
+for (let r = 0; r < 4; r++) {
+  const y = 0.4 + r * 0.55;
+  libreria.add(mesh(new THREE.BoxGeometry(0.42, 0.04, 1.8), matLegno, 0, y, 0));
+  let cz = -0.8;
+  while (cz < 0.8) {
+    const col = [0x7d3b30, 0x355a4a, 0x3a4a6a, 0x8a6a3a][Math.floor(Math.random() * 4)];
+    const h = 0.34 + Math.random() * 0.1;
+    libreria.add(mesh(new THREE.BoxGeometry(0.22, h, 0.045 + Math.random() * 0.03), new THREE.MeshStandardMaterial({ color: col, roughness: .8 }), 0.02, y + 0.04 + h / 2, cz));
+    cz += 0.06 + Math.random() * 0.03;
+  }
+}
+registraIngombro(libreria, 0.1);
+
+/* credenza sotto la parete sud */
+const credenza = new THREE.Group(); credenza.position.set(2.4, 0, meta - 0.4); scene.add(credenza);
+credenza.add(mesh(new THREE.BoxGeometry(1.6, 0.8, 0.5), matLegno, 0, 0.4, 0));
+[-0.4, 0.4].forEach(px => credenza.add(mesh(new THREE.BoxGeometry(0.7, 0.6, 0.02), matLegnoScuro, px, 0.42, 0.26)));
+registraIngombro(credenza, 0.1);
+
+/* finestra con cielo luminoso sulla parete ovest */
+const finestra = new THREE.Group(); finestra.position.set(-meta + 0.12, 1.5, -2.2); finestra.rotation.y = Math.PI / 2; scene.add(finestra);
+finestra.add(mesh(new THREE.BoxGeometry(1.6, 1.4, 0.06), matLegno, 0, 0, 0));
+const vetro = mesh(new THREE.PlaneGeometry(1.4, 1.2), new THREE.MeshBasicMaterial({ color: 0xbfe0ff }), 0, 0, 0.04); finestra.add(vetro);
+finestra.add(mesh(new THREE.BoxGeometry(0.06, 1.2, 0.08), matLegno, 0, 0, 0.05));
+finestra.add(mesh(new THREE.BoxGeometry(1.4, 0.06, 0.08), matLegno, 0, 0, 0.05));
+const luceFinestra = new THREE.PointLight(0xdbeeff, 0.5, 10); luceFinestra.position.set(-meta + 0.6, 1.6, -2.2); scene.add(luceFinestra);
+
+/* quadri sulla parete nord */
+function quadro(x, y, w, h, colore) {
+  const g = new THREE.Group(); g.position.set(x, y, meta - 0.12); scene.add(g);
+  g.add(mesh(new THREE.BoxGeometry(w + 0.08, h + 0.08, 0.04), matLegno, 0, 0, 0));
+  g.add(mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ color: colore, roughness: .9 }), 0, 0, -0.03));
+}
+quadro(-2.6, 1.9, 0.7, 0.9, 0x3a5a4a);
+quadro(-1.7, 1.8, 0.6, 0.6, 0x5a3a4a);
 
 /* ══════════════════════════════════════════
-   OGGETTI INTERATTIVI
+   LE TRE LAMPADE-INDIZIO
    ══════════════════════════════════════════ */
-const interattivi = [];
-function rendiInteractivo(mesh, onSelect) {
-  mesh.userData.onSelect = onSelect;
-  if (mesh.material && 'emissiveIntensity' in mesh.material) mesh.userData.emBase = mesh.material.emissiveIntensity;
-  interattivi.push(mesh);
-}
+function registraFiamma(mat, base, luce, luceBase) { fiamme.push({ mat, base, luce, luceBase, seme: Math.random() * 100 }); }
 
-function creaLuce(i, x, z) {
+function tavolinetto(x, z) {
   const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
-  const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.28, 0.34, 0.9, 16),
-    new THREE.MeshStandardMaterial({ color: 0x2a3144, roughness: 0.8 })
-  );
-  base.position.y = 0.45; g.add(base);
-  const cristallo = new THREE.Mesh(
-    new THREE.OctahedronGeometry(0.22),
-    new THREE.MeshStandardMaterial({ color: COLORI_LUCE[i], emissive: COLORI_LUCE[i], emissiveIntensity: 0.25, roughness: 0.3 })
-  );
-  cristallo.position.y = 1.1; g.add(cristallo);
-  const puntoLuce = new THREE.PointLight(COLORI_LUCE[i], 0, 4);
-  puntoLuce.position.set(0, 1.1, 0); g.add(puntoLuce);
-
-  const etichetta = pannelloTesto("Luce " + (i + 1) + " — tocca per ascoltare", 0.9);
-  etichetta.position.set(0, 1.7, 0); g.add(etichetta);
-
-  let attiva = false;
-  rendiInteractivo(cristallo, () => {
-    attiva = !attiva;
-    puntoLuce.intensity = attiva ? 1.4 : 0;
-    cristallo.material.emissiveIntensity = attiva ? 1.2 : 0.25;
-    etichetta.userData.aggiorna(attiva ? INDIZI[i] : "Luce " + (i + 1) + " — tocca per ascoltare");
-    aggiornaStato(attiva ? INDIZI[i] : "");
-  });
+  g.add(mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.5, 16), matLegno, 0, 0.25, 0));
+  g.add(mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.04, 16), matLegnoScuro, 0, 0.5, 0));
+  registraIngombro(g, 0.1); return g;
 }
-creaLuce(0, -3.2, -1.5);
-creaLuce(1, 0, -2.2);
-creaLuce(2, 3.2, -1.5);
+
+/* lampada su tavolinetto (indizi 0 e 1), oppure piantana (indizio 2) */
+function lampada(i, x, z, piantana) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
+  let altezzaBase = 0;
+  if (piantana) {
+    g.add(mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.05, 16), matLegnoScuro, 0, 0.025, 0));
+    g.add(mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.5, 10), new THREE.MeshStandardMaterial({ color: 0x8a7a4a, metalness: .6, roughness: .4 }), 0, 0.78, 0));
+    altezzaBase = 1.5;
+  } else {
+    const tav = tavolinetto(x, z); // il tavolinetto è separato, già nel mondo
+    g.add(mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.3, 12), i === 0 ? new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .7, roughness: .3 }) : new THREE.MeshStandardMaterial({ color: 0xcfc3b0, roughness: .6 }), 0, 0.65, 0));
+    altezzaBase = 0.8;
+  }
+  // paralume
+  const matParalume = new THREE.MeshStandardMaterial({ color: 0xf0e2b8, emissive: 0xd9b24a, emissiveIntensity: 0.12, roughness: 0.9, side: THREE.DoubleSide });
+  const paralume = mesh(new THREE.CylinderGeometry(0.2, 0.28, 0.3, 20, 1, true), matParalume, 0, altezzaBase + 0.15, 0); g.add(paralume);
+  const luce = new THREE.PointLight(0xffd98a, 0, 5); luce.position.set(0, altezzaBase + 0.1, 0); g.add(luce);
+
+  const etichetta = pannelloTesto("Tocca per accendere", 0.7);
+  etichetta.position.set(0, altezzaBase + 0.65, 0); g.add(etichetta);
+
+  // zona cliccabile attorno al paralume
+  const zona = mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.5, 12), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.001 }), 0, altezzaBase + 0.15, 0); g.add(zona);
+
+  let accesa = false;
+  rendiInteractivo(zona, () => {
+    accesa = !accesa;
+    luce.intensity = accesa ? 1.3 : 0;
+    matParalume.emissiveIntensity = accesa ? 0.9 : 0.12;
+    etichetta.userData.aggiorna(accesa ? INDIZI[i] : "Tocca per accendere");
+    aggiornaStato(accesa ? INDIZI[i] : "");
+  });
+  registraIngombro(g, 0.1);
+}
+lampada(0, -3.3, 1.9, false);  // lampada di ottone, su tavolinetto, angolo
+lampada(1, 3.3, 1.9, false);   // lampada di ceramica, su tavolinetto, angolo
+lampada(2, 3.2, -2.6, true);   // piantana nell'angolo nord-est
 
 /* ══════════════════════════════════════════
-   PORTA + SERRATURA
+   PORTA (anta con pannelli + stipite + maniglia)
    ══════════════════════════════════════════ */
+const stipiteMat = new THREE.MeshStandardMaterial({ color: 0xe9e2d2, roughness: 0.6 });
+[-1, 1].forEach(s => scene.add(mesh(new THREE.BoxGeometry(0.12, 2.2, 0.26), stipiteMat, s * (varco / 2 + 0.06), 1.1, -meta + 0.02)));
+scene.add(mesh(new THREE.BoxGeometry(varco + 0.24, 0.12, 0.26), stipiteMat, 0, 2.2, -meta + 0.02));
+
 const cardine = new THREE.Group();
-cardine.position.set(-0.8, 0, -meta + 0.1);
-scene.add(cardine);
-const porta = new THREE.Mesh(
-  new THREE.BoxGeometry(1.6, ALT - 0.5, 0.14),
-  new THREE.MeshStandardMaterial({ color: 0x3a2f22, roughness: 0.7 })
-);
-porta.position.set(0.8, (ALT - 0.5) / 2, 0);
-cardine.add(porta);
+cardine.position.set(-varco / 2, 0, -meta + 0.08); scene.add(cardine);
+const antaMat = new THREE.MeshStandardMaterial({ color: 0x6a4428, roughness: 0.5 });
+const anta = mesh(new THREE.BoxGeometry(varco, 2.1, 0.08), antaMat, varco / 2, 1.05, 0); cardine.add(anta);
+// pannelli incassati sull'anta
+[[0.62], [1.45]].forEach(([py]) => { const p = mesh(new THREE.BoxGeometry(varco - 0.3, 0.7, 0.03), matLegnoScuro, varco / 2, py, 0.05); cardine.add(p); });
+// maniglia dorata
+const maniglia = mesh(new THREE.BoxGeometry(0.06, 0.06, 0.18), new THREE.MeshStandardMaterial({ color: 0xd9b24a, metalness: .8, roughness: .3 }), varco - 0.18, 1.05, 0.1); cardine.add(maniglia);
 
 let portaTarget = 0, portaAperta = false;
 function apriPorta() {
@@ -266,41 +388,41 @@ function apriPorta() {
   aggiornaStato("La porta si apre. Oltre la soglia, la demo è completa.");
 }
 
+/* ══════════════════════════════════════════
+   TASTIERINO a parete (pannello + tasti in rilievo + display)
+   ══════════════════════════════════════════ */
 const inseriti = [];
-const displaySerratura = pannelloTesto("Serratura: _ _ _", 1.1, '#ffe8b0');
-displaySerratura.position.set(1.7, 1.5, -meta + 0.12);
-scene.add(displaySerratura);
+const pannelloKp = new THREE.Group();
+pannelloKp.position.set(varco / 2 + 0.55, 1.35, -meta + 0.12); scene.add(pannelloKp);
+// piastra
+pannelloKp.add(mesh(new THREE.BoxGeometry(0.78, 1.15, 0.05), new THREE.MeshStandardMaterial({ color: 0x2b2017, roughness: .5 }), 0, 0, 0));
+pannelloKp.add(mesh(new THREE.BoxGeometry(0.82, 1.19, 0.03), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .6, roughness: .4 }), 0, 0, -0.02));
+// display
+const display = pannelloTesto("_ _ _", 0.62, '#ffe8a8');
+display.position.set(0, 0.42, 0.045); display.scale.set(1, 0.9, 1); pannelloKp.add(display);
 function mostraSerratura() {
-  const s = [0, 1, 2].map(i => inseriti[i] != null ? inseriti[i] : "_").join(" ");
-  displaySerratura.userData.aggiorna("Serratura: " + s);
+  display.userData.aggiorna([0, 1, 2].map(i => inseriti[i] != null ? inseriti[i] : "_").join("  "));
 }
 
-function tastoNumerico(n, x, y) {
-  const m = new THREE.Mesh(
-    new THREE.BoxGeometry(0.22, 0.22, 0.06),
-    new THREE.MeshStandardMaterial({ color: 0x2b3650, emissive: 0x1a2740, emissiveIntensity: 0.2 })
-  );
-  m.position.set(x, y, -meta + 0.14); scene.add(m);
-  const et = pannelloTesto(String(n), 0.18, '#dce6ff');
-  et.position.set(x, y, -meta + 0.18); scene.add(et);
+function tasto(n, col, riga) {
+  const bx = (col - 1) * 0.23, by = 0.08 - riga * 0.23;
+  const m = mesh(new THREE.BoxGeometry(0.19, 0.19, 0.06),
+    new THREE.MeshStandardMaterial({ color: 0x3a4660, emissive: 0x111b30, emissiveIntensity: 0.3, roughness: .5 }), bx, by, 0.055);
+  pannelloKp.add(m);
+  const et = pannelloTesto(String(n), 0.14, '#eaf0ff'); et.position.set(bx, by, 0.09); pannelloKp.add(et);
   rendiInteractivo(m, () => {
     if (portaAperta) return;
     if (inseriti.length >= 3) inseriti.length = 0;
-    inseriti.push(n);
-    mostraSerratura();
+    inseriti.push(n); mostraSerratura();
+    m.material.emissiveIntensity = 1.0; setTimeout(() => m.material.emissiveIntensity = 0.3, 150);
     if (inseriti.length === 3) {
-      if (inseriti[0] === CODICE[0] && inseriti[1] === CODICE[1] && inseriti[2] === CODICE[2]) {
-        setTimeout(apriPorta, 250);
-      } else {
-        aggiornaStato("Codice errato. Riprova: le luci conoscono le cifre.");
-        setTimeout(() => { inseriti.length = 0; mostraSerratura(); }, 900);
-      }
+      if (inseriti[0] === CODICE[0] && inseriti[1] === CODICE[1] && inseriti[2] === CODICE[2]) setTimeout(apriPorta, 250);
+      else { aggiornaStato("Codice errato. Riprova: le lampade conoscono le cifre."); setTimeout(() => { inseriti.length = 0; mostraSerratura(); }, 900); }
     }
   });
 }
-const baseX = 2.4, baseY = 2.0, passo = 0.3;
-for (let n = 0; n < 9; n++) tastoNumerico(n + 1, baseX + (n % 3) * passo, baseY - Math.floor(n / 3) * passo);
-tastoNumerico(0, baseX + passo, baseY - 3 * passo);
+for (let n = 1; n <= 9; n++) tasto(n, ((n - 1) % 3) + 1, Math.floor((n - 1) / 3));
+tasto(0, 2, 3);
 
 /* ══════════════════════════════════════════
    CONTROLLER VR
@@ -308,11 +430,9 @@ tastoNumerico(0, baseX + passo, baseY - 3 * passo);
 const tmp = new THREE.Matrix4();
 const raycaster = new THREE.Raycaster();
 const controller = [];
-
 function raggioMesh() {
   const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]);
-  const linea = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x9ec1ff }));
-  linea.scale.z = 5; return linea;
+  const l = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xe6c88a })); l.scale.z = 5; return l;
 }
 for (let i = 0; i < 2; i++) {
   const c = renderer.xr.getController(i);
@@ -320,15 +440,12 @@ for (let i = 0; i < 2; i++) {
   c.addEventListener('selectstart', () => azioneController(c));
   dolly.add(c); controller.push(c);
   const grip = renderer.xr.getControllerGrip(i);
-  grip.add(new THREE.Mesh(
-    new THREE.BoxGeometry(0.05, 0.05, 0.14),
-    new THREE.MeshStandardMaterial({ color: 0x3a4660, emissive: 0x20304f, emissiveIntensity: 0.4 })
-  ));
+  grip.add(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.14), new THREE.MeshStandardMaterial({ color: 0x3a2e20, emissive: 0x20160a, emissiveIntensity: 0.4 })));
   dolly.add(grip);
 }
-function puntaDa(origine) {
-  tmp.identity().extractRotation(origine.matrixWorld);
-  raycaster.ray.origin.setFromMatrixPosition(origine.matrixWorld);
+function puntaDa(o) {
+  tmp.identity().extractRotation(o.matrixWorld);
+  raycaster.ray.origin.setFromMatrixPosition(o.matrixWorld);
   raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tmp);
 }
 function azioneController(c) {
@@ -338,101 +455,87 @@ function azioneController(c) {
   const suolo = raycaster.intersectObject(pavimento)[0];
   if (suolo) teleport(suolo.point);
 }
-function teleport(punto) {
+function teleport(p) {
   const cam = new THREE.Vector3(); camera.getWorldPosition(cam);
-  dolly.position.x += punto.x - cam.x;
-  dolly.position.z += punto.z - cam.z;
-  limitaDolly();
+  dolly.position.x += p.x - cam.x; dolly.position.z += p.z - cam.z; risolviPos();
 }
-function limitaDolly() {
-  const b = meta - 0.6;
+function risolviPos() {
+  const b = meta - 0.5;
   dolly.position.x = Math.max(-b, Math.min(b, dolly.position.x));
-  dolly.position.z = Math.max(-b, Math.min(portaAperta ? meta : b, dolly.position.z));
+  dolly.position.z = Math.max(-b, Math.min(portaAperta ? meta + 1 : b, dolly.position.z));
+  ingombri.forEach(r => {
+    const px = dolly.position.x, pz = dolly.position.z;
+    if (px > r.minX && px < r.maxX && pz > r.minZ && pz < r.maxZ) {
+      const dL = px - r.minX, dR = r.maxX - px, dU = pz - r.minZ, dD = r.maxZ - pz, mn = Math.min(dL, dR, dU, dD);
+      if (mn === dL) dolly.position.x = r.minX; else if (mn === dR) dolly.position.x = r.maxX;
+      else if (mn === dU) dolly.position.z = r.minZ; else dolly.position.z = r.maxZ;
+    }
+  });
 }
 function muoviConLevetta(dt) {
   const s = renderer.xr.getSession(); if (!s) return;
   for (const src of s.inputSources) {
     if (!src.gamepad || src.handedness !== 'left') continue;
-    const ax = src.gamepad.axes;
-    const lx = ax[2] || 0, ly = ax[3] || 0;
+    const ax = src.gamepad.axes, lx = ax[2] || 0, ly = ax[3] || 0;
     if (Math.abs(lx) < 0.15 && Math.abs(ly) < 0.15) continue;
     const dir = new THREE.Vector3(); camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
     const destra = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0));
-    dolly.position.addScaledVector(dir, -ly * 2.2 * dt);
-    dolly.position.addScaledVector(destra, lx * 2.2 * dt);
-    limitaDolly();
+    dolly.position.addScaledVector(dir, -ly * 2 * dt); dolly.position.addScaledVector(destra, lx * 2 * dt); risolviPos();
   }
 }
 function evidenzia() {
   interattivi.forEach(m => { if ('emBase' in m.userData) m.material.emissiveIntensity = m.userData.emBase; });
   if (!renderer.xr.isPresenting) return;
-  controller.forEach(c => {
-    puntaDa(c);
-    const hit = raycaster.intersectObjects(interattivi, false)[0];
-    if (hit && hit.distance < 6 && 'emBase' in hit.object.userData) hit.object.material.emissiveIntensity = 1.0;
-  });
+  controller.forEach(c => { puntaDa(c); const hit = raycaster.intersectObjects(interattivi, false)[0]; if (hit && hit.distance < 6 && 'emBase' in hit.object.userData) hit.object.material.emissiveIntensity = 1.0; });
 }
 
 /* ══════════════════════════════════════════
-   CONTROLLI SU PC (anteprima)
+   CONTROLLI PC
    ══════════════════════════════════════════ */
-let yaw = Math.PI, pitch = 0, trascina = false, mx = 0, my = 0;
-const tasti = {};
+let yaw = Math.PI, pitch = 0, trascina = false, mx = 0, my = 0; const tasti = {};
 const cvEl = renderer.domElement;
 cvEl.addEventListener('mousedown', e => { trascina = true; mx = e.clientX; my = e.clientY; });
 addEventListener('mouseup', () => trascina = false);
-addEventListener('mousemove', e => {
-  if (!trascina || renderer.xr.isPresenting) return;
-  yaw -= (e.clientX - mx) * 0.004; pitch -= (e.clientY - my) * 0.004;
-  pitch = Math.max(-1.2, Math.min(1.2, pitch)); mx = e.clientX; my = e.clientY;
-});
+addEventListener('mousemove', e => { if (!trascina || renderer.xr.isPresenting) return; yaw -= (e.clientX - mx) * .004; pitch -= (e.clientY - my) * .004; pitch = Math.max(-1.2, Math.min(1.2, pitch)); mx = e.clientX; my = e.clientY; });
 addEventListener('keydown', e => tasti[e.code] = true);
 addEventListener('keyup', e => tasti[e.code] = false);
 cvEl.addEventListener('click', e => {
   if (renderer.xr.isPresenting) return;
   const m = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   raycaster.setFromCamera(m, camera);
-  const hit = raycaster.intersectObjects(interattivi, false)[0];
-  if (hit) hit.object.userData.onSelect();
+  const hit = raycaster.intersectObjects(interattivi, false)[0]; if (hit) hit.object.userData.onSelect();
 });
 function aggiornaPC(dt) {
   if (renderer.xr.isPresenting) return;
   dolly.rotation.y = yaw; camera.rotation.x = pitch;
-  const dir = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
-  const destra = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
-  const v = 3 * dt;
+  const dir = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)), destra = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)), v = 2.6 * dt;
   if (tasti['KeyW']) dolly.position.addScaledVector(dir, -v);
   if (tasti['KeyS']) dolly.position.addScaledVector(dir, v);
   if (tasti['KeyA']) dolly.position.addScaledVector(destra, -v);
   if (tasti['KeyD']) dolly.position.addScaledVector(destra, v);
-  limitaDolly();
+  risolviPos();
 }
 
 /* ══════════════════════════════════════════
-   STATO + CICLO DI DISEGNO
+   STATO + LOOP
    ══════════════════════════════════════════ */
 let timerStato;
-function aggiornaStato(t) {
-  if (!t) return;
-  elStato.textContent = t; elStato.style.display = 'block';
-  clearTimeout(timerStato);
-  timerStato = setTimeout(() => { if (!portaAperta) elStato.style.display = 'none'; }, 4000);
-}
-aggiornaStato("Trova le tre luci e componi il codice sulla porta.");
+function aggiornaStato(t) { if (!t) return; elStato.textContent = t; elStato.style.display = 'block'; clearTimeout(timerStato); timerStato = setTimeout(() => { if (!portaAperta) elStato.style.display = 'none'; }, 4000); }
+aggiornaStato("Accendi le tre lampade e componi il codice sul tastierino della porta.");
+mostraSerratura();
 
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
-  aggiornaPC(dt);
-  muoviConLevetta(dt);
-  evidenzia();
+  aggiornaPC(dt); muoviConLevetta(dt); evidenzia();
   const camPos = new THREE.Vector3(); camera.getWorldPosition(camPos);
   pannelli.forEach(p => p.lookAt(camPos));
+  const t = performance.now() * 0.001;
+  fiamme.forEach(f => { const tr = f.base * (0.85 + 0.15 * Math.sin(t * 8 + f.seme)); f.mat.emissiveIntensity = tr; if (f.luce) f.luce.intensity = f.luceBase; });
   cardine.rotation.y += (portaTarget - cardine.rotation.y) * 0.05;
   renderer.render(scene, camera);
 });
-
-setTimeout(() => { elStato.textContent = "Pronto. Premi « ENTER VR » o esplora col mouse."; }, 600);
+setTimeout(() => { elStato.textContent = "Pronto. Premi « ENTRA IN VR » o esplora col mouse."; }, 600);
 
 }
 </script>
