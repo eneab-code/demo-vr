@@ -716,6 +716,7 @@ function evidenzia() {
    CONTROLLI PC
    ══════════════════════════════════════════ */
 let yaw = Math.PI, pitch = 0, trascina = false, mx = 0, my = 0; const tasti = {};
+let ultimoTouch = 0;   // per ignorare il "click fantasma" che segue un tocco
 const cvEl = renderer.domElement;
 cvEl.addEventListener('mousedown', e => { trascina = true; mx = e.clientX; my = e.clientY; });
 addEventListener('mouseup', () => trascina = false);
@@ -724,6 +725,7 @@ addEventListener('keydown', e => tasti[e.code] = true);
 addEventListener('keyup', e => tasti[e.code] = false);
 cvEl.addEventListener('click', e => {
   if (renderer.xr.isPresenting) return;
+  if (performance.now() - ultimoTouch < 700) return;   // ignora il click fantasma post-tocco
   const m = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   raycaster.setFromCamera(m, camera);
   const hit = raycaster.intersectObjects(interattivi, false)[0]; if (hit) hit.object.userData.onSelect();
@@ -770,6 +772,7 @@ cvEl.addEventListener('touchmove', e => {
   }
 }, { passive: true });
 cvEl.addEventListener('touchend', e => {
+  ultimoTouch = performance.now();   // sopprime il click sintetico che seguirà
   for (const t of e.changedTouches) {
     if (t.identifier === joyId) { joyId = null; joyX = joyY = 0; joyKnob.style.transform = 'translate(0,0)'; }
     else if (t.identifier === lookId) {
