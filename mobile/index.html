@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<!--
+  Demo VR — "Il Salotto delle Tre Luci"
+  Ambiente dimostrativo originale per visori Meta Quest 2 / 3S / 3.
+  Three.js (classico, three@0.128) + WebXR. Nessun file aggiuntivo.
+  Per la VR va aperto su un indirizzo HTTPS (GitHub Pages).
+-->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Il Salotto delle Tre Luci — Demo VR</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #0b0a08; overflow: hidden; font-family: system-ui, Segoe UI, Roboto, sans-serif; }
+  #c { display: block; width: 100%; height: 100%; }
+  #aiuto {
+    position: fixed; left: 16px; bottom: 16px; z-index: 10;
+    max-width: 320px; color: #efe6d6; background: rgba(28,22,16,.82);
+    border: 1px solid rgba(190,160,110,.4); border-radius: 10px;
+    padding: 12px 14px; font-size: 13px; line-height: 1.5;
+  }
+  #aiuto b { color: #e6c88a; }
+  #aiuto .chiudi { float: right; cursor: pointer; color: #b7a585; margin-left: 10px; }
+  #stato {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 10;
+    color: #efe6d6; background: rgba(28,22,16,.72); border: 1px solid rgba(190,160,110,.35);
+    border-radius: 20px; padding: 6px 16px; font-size: 13px; letter-spacing: .02em; text-align: center;
+  }
+  /* comandi smartphone */
+  #joy { position: fixed; left: 24px; bottom: 28px; width: 120px; height: 120px; border-radius: 50%;
+    background: rgba(40,30,20,.32); border: 1px solid rgba(201,162,74,.5); z-index: 15; touch-action: none; display: none; }
+  #joyKnob { position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin-left: -25px; margin-top: -25px;
+    border-radius: 50%; background: rgba(201,162,74,.8); transform: translate(0,0); }
+  #gyroBtn { position: fixed; right: 16px; bottom: 34px; z-index: 15; padding: 10px 14px; font: 13px system-ui, sans-serif;
+    color: #efe6d6; background: #3a2c1a; border: 1px solid #c9a24a; border-radius: 8px; display: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="stato">Caricamento…</div>
+<div id="joy"><div id="joyKnob"></div></div>
+<button id="gyroBtn">Giroscopio</button>
+<div id="aiuto">
+  <span class="chiudi" onclick="this.parentNode.style.display='none'">✕</span>
+  <b>Come si gioca</b><br>
+  <b>Nel visore:</b> premi il <b>grilletto</b> puntando il pavimento per spostarti; punta un oggetto che si illumina e premi il grilletto per usarlo. La <b>levetta sinistra</b> cammina.<br>
+  <b>Su smartphone:</b> il <b>joystick</b> in basso a sinistra cammina, <b>trascina il dito</b> (lato destro) per guardarti intorno, <b>tocca</b> un oggetto per usarlo. Pulsante <b>Giroscopio</b> per muovere la vista col telefono.<br>
+  <b>Su PC:</b> trascina il mouse, <b>W A S D</b> per muoverti, <b>clic</b> per interagire.<br><br>
+  Accendi le tre lampade, scopri le cifre e componile sul tastierino della porta.
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script>
+const elStato = document.getElementById('stato');
+if (!window.THREE) { elStato.textContent = "Impossibile caricare la grafica 3D (serve la connessione a internet)."; }
+else { avvia(); }
+
+function avvia() {
+
+/* ══════════════════════════════════════════
+   ENIGMA (modificabile)
+   ══════════════════════════════════════════ */
+const CODICE = [3, 7, 1];
+const INDIZI = [
+  "La lampada di ottone si accende e mostra « 3 »",
+  "La lampada di ceramica si accende e mostra « 7 »",
+  "La piantana nell'angolo si accende e mostra « 1 »"
+];
+
+/* ══════════════════════════════════════════
+   SCENA / RENDERER
+   ══════════════════════════════════════════ */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x120f0b);
+scene.fog = new THREE.Fog(0x120f0b, 9, 30);
+
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 100);
+
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const MAXANI = renderer.capabilities.getMaxAnisotropy();
+renderer.xr.enabled = true;
+try { renderer.xr.setReferenceSpaceType('local-floor'); } catch (e) {}
+creaBottoneVR(renderer);
+
+/* riflessi ambientali morbidi (image-based lighting) da un gradiente caldo */
+function ambienteRiflessi() {
+  const cv = document.createElement('canvas'); cv.width = 16; cv.height = 64;
+  const x = cv.getContext('2d'); const g = x.createLinearGradient(0, 0, 0, 64);
+  g.addColorStop(0, '#8a8294'); g.addColorStop(0.5, '#43383a'); g.addColorStop(1, '#17120c');
+  x.fillStyle = g; x.fillRect(0, 0, 16, 64);
+  const tex = new THREE.CanvasTexture(cv); tex.mapping = THREE.EquirectangularReflectionMapping;
+  const pm = new THREE.PMREMGenerator(renderer); const env = pm.fromEquirectangular(tex).texture;
+  pm.dispose(); tex.dispose(); return env;
+}
+
+function creaBottoneVR(renderer) {
+  const b = document.createElement('button');
+  b.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:20;' +
+    'padding:12px 22px;font:15px system-ui,sans-serif;letter-spacing:.06em;cursor:pointer;' +
+    'color:#efe6d6;background:#3a2c1a;border:1px solid #c9a24a;border-radius:8px;';
+  b.textContent = 'VR…'; document.body.appendChild(b);
+  if (!('xr' in navigator)) { b.textContent = 'VR non supportata da questo browser'; b.disabled = true; return; }
+  navigator.xr.isSessionSupported('immersive-vr').then(ok => {
+    if (!ok) { b.textContent = 'Apri questa pagina nel visore per la VR'; b.disabled = true; return; }
+    b.textContent = 'ENTRA IN VR'; b.onclick = entra;
+  }).catch(() => { b.textContent = 'VR non disponibile'; b.disabled = true; });
+  async function entra() {
+    try {
+      const s = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor'] });
+      await renderer.xr.setSession(s);
+      b.textContent = 'ESCI DALLA VR'; b.onclick = () => s.end();
+      s.addEventListener('end', () => { b.textContent = 'ENTRA IN VR'; b.onclick = entra; });
+    } catch (e) { b.textContent = 'Avvio VR non riuscito — riprova'; }
+  }
+}
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* luce ambientale calda da salotto */
+scene.environment = ambienteRiflessi();
+scene.add(new THREE.HemisphereLight(0xfff0d6, 0x2a211a, 0.5));
+const sole = new THREE.DirectionalLight(0xffe9c4, 0.7);
+sole.position.set(5, 7, 3); scene.add(sole);
+sole.castShadow = true;
+sole.shadow.mapSize.set(1024, 1024);
+sole.shadow.camera.near = 0.5; sole.shadow.camera.far = 24;
+sole.shadow.camera.left = -7; sole.shadow.camera.right = 7;
+sole.shadow.camera.top = 7; sole.shadow.camera.bottom = -7;
+sole.shadow.bias = -0.0006; sole.shadow.radius = 3;
+
+const dolly = new THREE.Group();
+dolly.position.set(0, 0, 3.4);
+dolly.add(camera);
+camera.position.set(0, 1.6, 0);
+scene.add(dolly);
+
+/* ══════════════════════════════════════════
+   MATERIALI E TEXTURE
+   ══════════════════════════════════════════ */
+function texParquet() {
+  const w = 256, h = 256, cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const x = cv.getContext('2d');
+  const toni = ['#6b4a2e', '#7a5636', '#5f4228', '#734f30'];
+  const doga = 32;
+  for (let yy = 0; yy < h; yy += doga) {
+    const off = ((yy / doga) % 2) * 64;
+    for (let xx = -64; xx < w; xx += 128) {
+      x.fillStyle = toni[Math.floor(Math.random() * toni.length)];
+      x.fillRect(xx + off, yy + 1, 126, doga - 2);
+      x.strokeStyle = 'rgba(30,18,8,.5)'; x.lineWidth = 1; x.strokeRect(xx + off, yy + 1, 126, doga - 2);
+    }
+  }
+  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 3); t.anisotropy = MAXANI;
+  return t;
+}
+function texTappeto() {
+  const s = 256, cv = document.createElement('canvas'); cv.width = cv.height = s;
+  const x = cv.getContext('2d');
+  x.fillStyle = '#7d2b24'; x.fillRect(0, 0, s, s);
+  x.strokeStyle = '#caa24a'; x.lineWidth = 10; x.strokeRect(14, 14, s - 28, s - 28);
+  x.strokeStyle = '#e9d7a8'; x.lineWidth = 3; x.strokeRect(30, 30, s - 60, s - 60);
+  x.fillStyle = '#caa24a';
+  for (let i = 48; i < s - 40; i += 40) { rombo(x, i, s / 2, 10); rombo(x, s / 2, i, 10); }
+  function rombo(c, cx, cy, r) { c.beginPath(); c.moveTo(cx, cy - r); c.lineTo(cx + r, cy); c.lineTo(cx, cy + r); c.lineTo(cx - r, cy); c.closePath(); c.fill(); }
+  const t = new THREE.CanvasTexture(cv); t.anisotropy = MAXANI; return t;
+}
+function texParete() {
+  // carta da parati: fondo caldo, strisce verticali tono su tono, motivo a rombi
+  const s = 256, cv = document.createElement('canvas'); cv.width = cv.height = s;
+  const x = cv.getContext('2d');
+  x.fillStyle = '#7a6348'; x.fillRect(0, 0, s, s);
+  for (let i = 0; i < s; i += 16) { x.fillStyle = (i / 16) % 2 ? 'rgba(255,240,210,0.045)' : 'rgba(0,0,0,0.05)'; x.fillRect(i, 0, 8, s); }
+  x.strokeStyle = 'rgba(214,184,124,0.22)'; x.lineWidth = 2;
+  for (let yy = 0; yy <= s; yy += 64) for (let xx = 0; xx <= s; xx += 64) {
+    x.beginPath(); x.moveTo(xx, yy - 13); x.lineTo(xx + 13, yy); x.lineTo(xx, yy + 13); x.lineTo(xx - 13, yy); x.closePath(); x.stroke();
+    x.beginPath(); x.arc(xx, yy, 2.5, 0, 7); x.fillStyle = 'rgba(214,184,124,0.3)'; x.fill();
+  }
+  for (let i = 0; i < 1400; i++) { x.fillStyle = 'rgba(0,0,0,' + (Math.random() * .03) + ')'; x.fillRect(Math.random() * s, Math.random() * s, 1, 1); }
+  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 1.4); t.anisotropy = MAXANI;
+  return t;
+}
+
+const LATO = 8.4, ALT = 3.0, meta = LATO / 2;
+
+const pavimento = new THREE.Mesh(
+  new THREE.PlaneGeometry(LATO, LATO),
+  new THREE.MeshStandardMaterial({ map: texParquet(), roughness: 0.75, metalness: 0.0 })
+);
+pavimento.rotation.x = -Math.PI / 2; scene.add(pavimento);
+const pavimenti = [pavimento];   // tutte le superfici calpestabili (per il teletrasporto in VR)
+
+const soffitto = new THREE.Mesh(
+  new THREE.PlaneGeometry(LATO, LATO),
+  new THREE.MeshStandardMaterial({ color: 0xece2d0, roughness: 1 })
+);
+soffitto.rotation.x = Math.PI / 2;
+soffitto.position.y = ALT;
+scene.add(soffitto);
+
+const matParete = new THREE.MeshStandardMaterial({ map: texParete(), color: 0xffffff, roughness: 1 });
+const matBattiscopa = new THREE.MeshStandardMaterial({ color: 0xe9e2d2, roughness: 0.6 });
+function parete(w, x, z, ry, y) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, ALT, 0.2), matParete);
+  m.position.set(x, y == null ? ALT / 2 : y, z); m.rotation.y = ry; scene.add(m);
+  // battiscopa
+  const b = new THREE.Mesh(new THREE.BoxGeometry(w, 0.16, 0.24), matBattiscopa);
+  b.position.set(x, 0.08, z); b.rotation.y = ry; scene.add(b);
+  return m;
+}
+parete(LATO, 0, meta, 0);
+parete(LATO, -meta, 0, Math.PI / 2);
+parete(LATO, meta, 0, Math.PI / 2);
+// parete nord con varco porta (largo 1.5)
+const varco = 1.5;
+parete((LATO - varco) / 2, -(varco / 2 + (LATO - varco) / 4), -meta, 0);
+parete((LATO - varco) / 2,  (varco / 2 + (LATO - varco) / 4), -meta, 0);
+const sopraPorta = new THREE.Mesh(new THREE.BoxGeometry(varco + 0.2, ALT - 2.2, 0.2), matParete);
+sopraPorta.position.set(0, 2.2 + (ALT - 2.2) / 2, -meta); scene.add(sopraPorta);
+
+/* tappeto centrale */
+const tappeto = new THREE.Mesh(
+  new THREE.BoxGeometry(3.6, 0.02, 2.6),
+  new THREE.MeshStandardMaterial({ map: texTappeto(), roughness: 1 })
+);
+tappeto.position.set(0, 0.012, 0.4); scene.add(tappeto);
+
+/* ══════════════════════════════════════════
+   OGGETTI INTERATTIVI + COLLISIONI
+   ══════════════════════════════════════════ */
+const interattivi = [];
+const pannelli = [];
+const fiamme = [];
+const ingombri = [];
+function rendiInteractivo(mesh, onSelect) {
+  mesh.userData.onSelect = onSelect;
+  if (mesh.material && 'emissiveIntensity' in mesh.material) mesh.userData.emBase = mesh.material.emissiveIntensity;
+  interattivi.push(mesh);
+}
+function registraIngombro(obj, m) {
+  m = m == null ? 0.25 : m;
+  obj.updateMatrixWorld(true);
+  const b = new THREE.Box3().setFromObject(obj);
+  ingombri.push({ minX: b.min.x - m, maxX: b.max.x + m, minZ: b.min.z - m, maxZ: b.max.z + m });
+}
+
+function pannelloTesto(testo, larghezza, colore, fisso, fontPx) {
+  larghezza = larghezza || 1.2; colore = colore || '#f3ead8'; fontPx = fontPx || 30;
+  const w = 512, h = 256, cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const x = cv.getContext('2d');
+  const disegna = (t) => {
+    x.clearRect(0, 0, w, h);
+    x.fillStyle = 'rgba(28,22,16,.92)'; roundRect(x, 6, 6, w - 12, h - 12, 18); x.fill();
+    x.strokeStyle = 'rgba(201,162,74,.7)'; x.lineWidth = 6; roundRect(x, 6, 6, w - 12, h - 12, 18); x.stroke();
+    x.fillStyle = colore; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = 'bold ' + fontPx + 'px system-ui, sans-serif';
+    const righe = String(t).split('\n').reduce((a, p) => a.concat(spezza(p, 24)), []);
+    righe.forEach((r, i) => x.fillText(r, w / 2, h / 2 - (righe.length - 1) * (fontPx * 0.65) + i * (fontPx * 1.3)));
+  };
+  disegna(testo);
+  const tex = new THREE.CanvasTexture(cv);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(larghezza, larghezza * h / w),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+  mesh.userData.aggiorna = (nuovo) => { disegna(nuovo); tex.needsUpdate = true; };
+  if (!fisso) pannelli.push(mesh);   // "fisso" = etichetta piatta che NON gira verso il giocatore
+  return mesh;
+}
+function roundRect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+function spezza(t, max) {
+  const p = t.split(' '), r = []; let l = '';
+  p.forEach(w => { if ((l + ' ' + w).trim().length > max) { r.push(l.trim()); l = w; } else l += ' ' + w; });
+  if (l.trim()) r.push(l.trim()); return r;
+}
+
+/* ── MOBILI ── */
+const matLegno = new THREE.MeshStandardMaterial({ color: 0x5a3c22, roughness: 0.6 });
+const matLegnoScuro = new THREE.MeshStandardMaterial({ color: 0x3a2614, roughness: 0.55 });
+
+/* ── forme morbide: box con bordi arrotondati (estrusione smussata) ── */
+function formaArrotondata(w, d, r) {
+  const s = new THREE.Shape(), x = -w / 2, y = -d / 2;
+  s.moveTo(x + r, y);
+  s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + d - r); s.quadraticCurveTo(x + w, y + d, x + w - r, y + d);
+  s.lineTo(x + r, y + d); s.quadraticCurveTo(x, y + d, x, y + d - r);
+  s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
+  return s;
+}
+function boxMorbido(w, h, d, r, mat) {
+  const bevel = Math.min(0.05, h / 2 - 0.002, r * 0.8);
+  const geo = new THREE.ExtrudeGeometry(formaArrotondata(w, d, r),
+    { depth: h - bevel * 2, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 3, curveSegments: 6 });
+  geo.rotateX(-Math.PI / 2); geo.computeBoundingBox(); geo.translate(0, -geo.boundingBox.min.y, 0);
+  geo.computeVertexNormals();
+  return new THREE.Mesh(geo, mat);   // base appoggiata a y=0
+}
+
+function divano(x, z, ry, colore) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g);
+  const tela = new THREE.MeshStandardMaterial({ color: colore, roughness: 0.95 });
+  const base = boxMorbido(2.0, 0.34, 0.95, 0.14, tela); base.position.y = 0.14; g.add(base);
+  // cuscini seduta
+  [-0.5, 0.5].forEach(px => { const c = boxMorbido(0.92, 0.2, 0.82, 0.12, tela); c.position.set(px, 0.46, 0.03); g.add(c); });
+  // schienale + cuscini schienale
+  const sch = boxMorbido(2.0, 0.66, 0.22, 0.14, tela); sch.position.set(0, 0.5, -0.38); g.add(sch);
+  [-0.5, 0.5].forEach(px => { const c = boxMorbido(0.86, 0.5, 0.17, 0.12, tela); c.position.set(px, 0.64, -0.3); c.rotation.x = -0.12; g.add(c); });
+  // braccioli morbidi
+  [-1, 1].forEach(s => { const br = boxMorbido(0.26, 0.56, 0.95, 0.13, tela); br.position.set(s * 0.9, 0.2, 0); g.add(br); });
+  // piedini tornititi
+  [-0.88, 0.88].forEach(px => [-0.4, 0.4].forEach(pz => { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.035, 0.16, 10), matLegnoScuro); p.position.set(px, 0.08, pz); g.add(p); }));
+  registraIngombro(g, 0.15); return g;
+}
+divano(0, 1.7, Math.PI, 0x6e7f73);     // divano nord (di fronte a noi), verde salvia
+divano(-1.9, 0.3, Math.PI / 2, 0x7a6a55); // divano ovest, tortora
+
+/* poltrona */
+function poltrona(x, z, ry, colore) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g);
+  const tela = new THREE.MeshStandardMaterial({ color: colore, roughness: 0.95 });
+  const base = boxMorbido(0.95, 0.3, 0.9, 0.14, tela); base.position.y = 0.14; g.add(base);
+  const cus = boxMorbido(0.82, 0.2, 0.78, 0.12, tela); cus.position.set(0, 0.42, 0.02); g.add(cus);
+  const sch = boxMorbido(0.95, 0.6, 0.2, 0.14, tela); sch.position.set(0, 0.46, -0.36); g.add(sch);
+  [-1, 1].forEach(s => { const br = boxMorbido(0.2, 0.5, 0.9, 0.12, tela); br.position.set(s * 0.47, 0.18, 0); g.add(br); });
+  [-0.4, 0.4].forEach(px => [-0.38, 0.38].forEach(pz => { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.03, 0.16, 10), matLegnoScuro); p.position.set(px, 0.08, pz); g.add(p); }));
+  registraIngombro(g, 0.15); return g;
+}
+poltrona(1.95, 0.5, -Math.PI / 2, 0x8a5a3c);
+function mesh(geo, mat, x, y, z) { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); return m; }
+
+/* tavolino da caffè */
+const tavolino = new THREE.Group(); tavolino.position.set(0, 0, 0.4); scene.add(tavolino);
+const topTav = boxMorbido(1.2, 0.08, 0.7, 0.05, matLegno); topTav.position.y = 0.42; tavolino.add(topTav);
+[[-0.5, -0.28], [0.5, -0.28], [-0.5, 0.28], [0.5, 0.28]].forEach(([gx, gz]) => tavolino.add(mesh(new THREE.CylinderGeometry(0.04, 0.03, 0.42, 10), matLegnoScuro, gx, 0.21, gz)));
+tavolino.add(mesh(new THREE.BoxGeometry(0.4, 0.04, 0.26), new THREE.MeshStandardMaterial({ color: 0x24425a, roughness: .5 }), 0.1, 0.47, 0)); // libri sul tavolino
+registraIngombro(tavolino, 0.1);
+
+/* ── LIBRERIA a parete est: struttura + libri dettagliati ──
+   Dorso dei libri rivolto verso la stanza (asse -x). */
+const libreria = new THREE.Group(); libreria.position.set(meta - 0.2, 0, -1.4); scene.add(libreria);
+const L_H = 2.4, L_L = 2.0, L_D = 0.36;        // altezza, lunghezza (z), profondità (x)
+const matCassa = new THREE.MeshStandardMaterial({ color: 0x4a3016, roughness: 0.55 });
+const matFondo = new THREE.MeshStandardMaterial({ color: 0x331f0e, roughness: 0.7 });
+// fondo (verso il muro), fianchi, cielo, base, cornice
+libreria.add(mesh(new THREE.BoxGeometry(0.04, L_H, L_L), matFondo, L_D / 2, L_H / 2, 0));
+[-1, 1].forEach(s => libreria.add(mesh(new THREE.BoxGeometry(L_D, L_H, 0.05), matCassa, 0, L_H / 2, s * L_L / 2)));
+libreria.add(mesh(new THREE.BoxGeometry(L_D + 0.06, 0.07, L_L + 0.06), matCassa, 0, L_H, 0));       // cielo
+libreria.add(mesh(new THREE.BoxGeometry(L_D + 0.06, 0.12, L_L + 0.06), matCassa, 0, 0.06, 0));      // zoccolo
+libreria.add(mesh(new THREE.BoxGeometry(L_D + 0.02, L_H, 0.04), matCassa, 0, L_H / 2, L_L / 2 + 0.03));
+libreria.add(mesh(new THREE.BoxGeometry(L_D + 0.02, L_H, 0.04), matCassa, 0, L_H / 2, -L_L / 2 - 0.03));
+
+const ripianiY = [0.18, 0.74, 1.30, 1.86];     // 4 ripiani → 4 vani
+ripianiY.forEach(y => libreria.add(mesh(new THREE.BoxGeometry(L_D, 0.04, L_L - 0.02), matCassa, 0, y, 0)));
+
+const coloriLibro = [0x7d3b30, 0x355a4a, 0x2f4a6a, 0x8a6a2a, 0x5a2f4a, 0x3a5a3a, 0x6a2520, 0x404858, 0xa8863a];
+function libroVerticale(y, z, altezzaVano) {
+  const t = 0.04 + Math.random() * 0.055;        // spessore (z)
+  const d = 0.2 + Math.random() * 0.08;          // profondità (x)
+  const bh = Math.min(altezzaVano - 0.06, 0.3 + Math.random() * 0.2);
+  const col = coloriLibro[Math.floor(Math.random() * coloriLibro.length)];
+  const g = new THREE.Group(); g.position.set(0, y + bh / 2, z);
+  g.add(mesh(new THREE.BoxGeometry(d, bh, t), new THREE.MeshStandardMaterial({ color: col, roughness: 0.85 }), -d / 2 + L_D / 2 - 0.02, 0, 0));
+  // fascia chiara del titolo + due nervature, appena SPORGENTI dal dorso (-x)
+  // per evitare lo z-fighting con la faccia del libro
+  const dorsoX = L_D / 2 - 0.02 - d;
+  g.add(mesh(new THREE.BoxGeometry(0.01, bh * 0.26, t * 0.82), new THREE.MeshStandardMaterial({ color: 0xd9c38a, roughness: 0.6 }), dorsoX - 0.006, bh * 0.1, 0));
+  [-bh * 0.32, bh * 0.36].forEach(oy => g.add(mesh(new THREE.BoxGeometry(0.01, 0.015, t * 0.82), new THREE.MeshStandardMaterial({ color: 0xcaa24a, metalness: .5, roughness: .4 }), dorsoX - 0.006, oy, 0)));
+  // leggera inclinazione occasionale
+  if (Math.random() < 0.12) g.rotation.x = (Math.random() < 0.5 ? 1 : -1) * 0.08;
+  libreria.add(g);
+  return t;
+}
+function pilaOrizzontale(y, z) {
+  const d = 0.22 + Math.random() * 0.05, larg = 0.26, n = 2 + Math.floor(Math.random() * 2);
+  let yy = y + 0.02;
+  for (let i = 0; i < n; i++) {
+    const t = 0.04 + Math.random() * 0.03;
+    const col = coloriLibro[Math.floor(Math.random() * coloriLibro.length)];
+    libreria.add(mesh(new THREE.BoxGeometry(d, t, larg), new THREE.MeshStandardMaterial({ color: col, roughness: 0.85 }), -d / 2 + L_D / 2 - 0.02, yy + t / 2, z));
+    yy += t + 0.004;
+  }
+  return larg;
+}
+function vaso(y, z) {
+  const g = new THREE.Group(); g.position.set(L_D / 2 - 0.14, y, z); libreria.add(g);
+  g.add(mesh(new THREE.CylinderGeometry(0.05, 0.035, 0.16, 12), new THREE.MeshStandardMaterial({ color: 0x3a6a6a, roughness: .5 }), 0, 0.08, 0));
+  return 0.14;
+}
+
+const ripianoConDeco = Math.floor(Math.random() * ripianiY.length);   // un solo ripiano con un decoro
+for (let r = 0; r < ripianiY.length; r++) {
+  const y = ripianiY[r] + 0.02, vano = (ripianiY[r + 1] || L_H - 0.1) - ripianiY[r];
+  let z = -L_L / 2 + 0.07;
+  let decoFatto = false;
+  while (z < L_L / 2 - 0.08) {
+    const spazio = (L_L / 2 - 0.08) - z;
+    if (r === ripianoConDeco && !decoFatto && spazio > 0.6 && z > -0.2 && Math.random() < 0.5) {
+      z += (Math.random() < 0.5 ? pilaOrizzontale(y, z + 0.14) + 0.1 : vaso(y, z + 0.08) + 0.14);
+      decoFatto = true;
+    } else {
+      z += libroVerticale(y, z, vano) + 0.005;
+    }
+  }
+}
+registraIngombro(libreria, 0.1);
+
+/* credenza sotto la parete sud */
+const credenza = new THREE.Group(); credenza.position.set(2.4, 0, meta - 0.4); scene.add(credenza);
+credenza.add(mesh(new THREE.BoxGeometry(1.6, 0.8, 0.5), matLegno, 0, 0.4, 0));
+[-0.4, 0.4].forEach(px => credenza.add(mesh(new THREE.BoxGeometry(0.7, 0.6, 0.02), matLegnoScuro, px, 0.42, 0.26)));
+registraIngombro(credenza, 0.1);
+
+/* finestra con cielo luminoso sulla parete ovest */
+const finestra = new THREE.Group(); finestra.position.set(-meta + 0.12, 1.5, -2.2); finestra.rotation.y = Math.PI / 2; scene.add(finestra);
+finestra.add(mesh(new THREE.BoxGeometry(1.6, 1.4, 0.06), matLegno, 0, 0, 0));
+const vetro = mesh(new THREE.PlaneGeometry(1.4, 1.2), new THREE.MeshBasicMaterial({ color: 0xbfe0ff }), 0, 0, 0.04); finestra.add(vetro);
+finestra.add(mesh(new THREE.BoxGeometry(0.06, 1.2, 0.08), matLegno, 0, 0, 0.05));
+finestra.add(mesh(new THREE.BoxGeometry(1.4, 0.06, 0.08), matLegno, 0, 0, 0.05));
+const luceFinestra = new THREE.PointLight(0xdbeeff, 0.5, 10); luceFinestra.position.set(-meta + 0.6, 1.6, -2.2); scene.add(luceFinestra);
+
+/* quadri sulla parete nord */
+function quadro(x, y, w, h, colore) {
+  const g = new THREE.Group(); g.position.set(x, y, meta - 0.12); scene.add(g);
+  g.add(mesh(new THREE.BoxGeometry(w + 0.08, h + 0.08, 0.04), matLegno, 0, 0, 0));
+  g.add(mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ color: colore, roughness: .9 }), 0, 0, -0.03));
+}
+quadro(-2.6, 1.9, 0.7, 0.9, 0x3a5a4a);
+quadro(-1.7, 1.8, 0.6, 0.6, 0x5a3a4a);
+
+/* ══════════════════════════════════════════
+   LE TRE LAMPADE-INDIZIO
+   ══════════════════════════════════════════ */
+function registraFiamma(mat, base, luce, luceBase) { fiamme.push({ mat, base, luce, luceBase, seme: Math.random() * 100 }); }
+
+function tavolinetto(x, z) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
+  g.add(mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.5, 16), matLegno, 0, 0.25, 0));
+  g.add(mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.04, 16), matLegnoScuro, 0, 0.5, 0));
+  registraIngombro(g, 0.1); return g;
+}
+
+/* lampada su tavolinetto (indizi 0 e 1), oppure piantana (indizio 2) */
+function lampada(i, x, z, piantana) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
+  let altezzaBase = 0;
+  if (piantana) {
+    g.add(mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.05, 16), matLegnoScuro, 0, 0.025, 0));
+    g.add(mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.5, 10), new THREE.MeshStandardMaterial({ color: 0x8a7a4a, metalness: .6, roughness: .4 }), 0, 0.78, 0));
+    altezzaBase = 1.5;
+  } else {
+    const tav = tavolinetto(x, z); // il tavolinetto è separato, già nel mondo
+    g.add(mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.3, 12), i === 0 ? new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .7, roughness: .3 }) : new THREE.MeshStandardMaterial({ color: 0xcfc3b0, roughness: .6 }), 0, 0.65, 0));
+    altezzaBase = 0.8;
+  }
+  // paralume
+  const matParalume = new THREE.MeshStandardMaterial({ color: 0xf0e2b8, emissive: 0xd9b24a, emissiveIntensity: 0.12, roughness: 0.9, side: THREE.DoubleSide });
+  const paralume = mesh(new THREE.CylinderGeometry(0.2, 0.28, 0.3, 20, 1, true), matParalume, 0, altezzaBase + 0.15, 0); g.add(paralume);
+  const luce = new THREE.PointLight(0xffd98a, 0, 5); luce.position.set(0, altezzaBase + 0.1, 0); g.add(luce);
+
+  const etichetta = pannelloTesto("Tocca per accendere", 0.7);
+  etichetta.position.set(0, altezzaBase + 0.65, 0); g.add(etichetta);
+
+  // zona cliccabile attorno al paralume
+  const zona = mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.5, 12), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.001 }), 0, altezzaBase + 0.15, 0); g.add(zona);
+
+  let accesa = false;
+  rendiInteractivo(zona, () => {
+    accesa = !accesa;
+    luce.intensity = accesa ? 1.3 : 0;
+    matParalume.emissiveIntensity = accesa ? 0.9 : 0.12;
+    etichetta.userData.aggiorna(accesa ? INDIZI[i] : "Tocca per accendere");
+    aggiornaStato(accesa ? INDIZI[i] : "");
+  });
+  registraIngombro(g, 0.1);
+}
+lampada(0, -3.3, 1.9, false);  // lampada di ottone, su tavolinetto, angolo
+lampada(1, 3.3, 1.9, false);   // lampada di ceramica, su tavolinetto, angolo
+lampada(2, 3.2, -2.6, true);   // piantana nell'angolo nord-est
+
+/* ══════════════════════════════════════════
+   PORTA (anta con pannelli + stipite + maniglia)
+   ══════════════════════════════════════════ */
+const stipiteMat = new THREE.MeshStandardMaterial({ color: 0xe9e2d2, roughness: 0.6 });
+[-1, 1].forEach(s => scene.add(mesh(new THREE.BoxGeometry(0.12, 2.2, 0.26), stipiteMat, s * (varco / 2 + 0.06), 1.1, -meta + 0.02)));
+scene.add(mesh(new THREE.BoxGeometry(varco + 0.24, 0.12, 0.26), stipiteMat, 0, 2.2, -meta + 0.02));
+
+const cardine = new THREE.Group();
+cardine.position.set(-varco / 2, 0, -meta + 0.08); scene.add(cardine);
+const antaMat = new THREE.MeshStandardMaterial({ color: 0x6a4428, roughness: 0.5 });
+const anta = mesh(new THREE.BoxGeometry(varco, 2.1, 0.08), antaMat, varco / 2, 1.05, 0); cardine.add(anta);
+// pannelli incassati sull'anta
+[[0.62], [1.45]].forEach(([py]) => { const p = mesh(new THREE.BoxGeometry(varco - 0.3, 0.7, 0.03), matLegnoScuro, varco / 2, py, 0.05); cardine.add(p); });
+// maniglia dorata
+const maniglia = mesh(new THREE.BoxGeometry(0.06, 0.06, 0.18), new THREE.MeshStandardMaterial({ color: 0xd9b24a, metalness: .8, roughness: .3 }), varco - 0.18, 1.05, 0.1); cardine.add(maniglia);
+
+let portaTarget = 0, portaAperta = false;
+function apriPorta() {
+  if (portaAperta) return;
+  portaAperta = true; portaTarget = -Math.PI * 0.62;
+  aggiornaStato("La porta si apre. Oltre la soglia, la demo è completa.");
+}
+
+/* ══════════════════════════════════════════
+   TASTIERINO a parete (pannello + tasti in rilievo + display)
+   ══════════════════════════════════════════ */
+const inseriti = [];
+const pannelloKp = new THREE.Group();
+pannelloKp.position.set(varco / 2 + 0.55, 1.35, -meta + 0.12); scene.add(pannelloKp);
+// piastra
+pannelloKp.add(mesh(new THREE.BoxGeometry(0.8, 1.3, 0.05), new THREE.MeshStandardMaterial({ color: 0x2b2017, roughness: .5 }), 0, 0, 0));
+pannelloKp.add(mesh(new THREE.BoxGeometry(0.84, 1.34, 0.03), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .6, roughness: .4 }), 0, 0, -0.02));
+// display (etichetta fissa, non ruota verso il giocatore)
+const display = pannelloTesto("_ _ _", 0.62, '#ffe8a8', true, 90);
+display.position.set(0, 0.46, 0.045); display.scale.set(1, 0.85, 1); pannelloKp.add(display);
+function mostraSerratura() {
+  display.userData.aggiorna([0, 1, 2].map(i => inseriti[i] != null ? inseriti[i] : "_").join("  "));
+}
+
+/* griglia centrata: colonne -0.23/0/0.23, righe dall'alto verso il basso */
+function tasto(n, col, riga) {
+  const bx = (col - 2) * 0.23, by = 0.22 - riga * 0.22;
+  const m = mesh(new THREE.BoxGeometry(0.18, 0.18, 0.05),
+    new THREE.MeshStandardMaterial({ color: 0x3a4660, emissive: 0x111b30, emissiveIntensity: 0.3, roughness: .5 }), bx, by, 0.05);
+  pannelloKp.add(m);
+  const et = pannelloTesto(String(n), 0.17, '#eaf0ff', true, 170); et.position.set(bx, by, 0.085); pannelloKp.add(et);
+  rendiInteractivo(m, () => {
+    if (portaAperta) return;
+    if (inseriti.length >= 3) inseriti.length = 0;
+    inseriti.push(n); mostraSerratura();
+    m.material.emissiveIntensity = 1.0; setTimeout(() => m.material.emissiveIntensity = 0.3, 150);
+    if (inseriti.length === 3) {
+      if (inseriti[0] === CODICE[0] && inseriti[1] === CODICE[1] && inseriti[2] === CODICE[2]) setTimeout(apriPorta, 250);
+      else { aggiornaStato("Codice errato. Riprova: le lampade conoscono le cifre."); setTimeout(() => { inseriti.length = 0; mostraSerratura(); }, 900); }
+    }
+  });
+}
+for (let n = 1; n <= 9; n++) tasto(n, ((n - 1) % 3) + 1, Math.floor((n - 1) / 3));
+tasto(0, 2, 3);
+
+/* ══════════════════════════════════════════
+   GALLERIA oltre la porta + porta finale "Sic mundus creatus est"
+   Si percorre solo dopo aver aperto la porta del salotto.
+   ══════════════════════════════════════════ */
+const CORR_LEN = 15;         // lunghezza della galleria
+const CW = 1.15;             // semi-larghezza
+const Z_PORTA = -meta;       // piano della porta del salotto
+const Z_FONDO = Z_PORTA - CORR_LEN;
+
+const matGalleria = new THREE.MeshStandardMaterial({ color: 0x2a2a34, roughness: 0.9 });
+const matCornice = new THREE.MeshStandardMaterial({ color: 0x1a1a20, roughness: 0.6 });
+const matRunner = new THREE.MeshStandardMaterial({ color: 0x5a1f22, roughness: 1 });
+
+// pavimento, tappeto-passatoia, soffitto
+const pavCorr = mesh(new THREE.BoxGeometry(CW * 2, 0.04, CORR_LEN), new THREE.MeshStandardMaterial({ map: texParquet(), roughness: .8 }), 0, 0, Z_PORTA - CORR_LEN / 2);
+scene.add(pavCorr); pavimenti.push(pavCorr);   // calpestabile anche il corridoio
+scene.add(mesh(new THREE.BoxGeometry(1.2, 0.02, CORR_LEN - 0.4), matRunner, 0, 0.03, Z_PORTA - CORR_LEN / 2));
+scene.add(mesh(new THREE.BoxGeometry(CW * 2, 0.04, CORR_LEN), new THREE.MeshStandardMaterial({ color: 0x15151c }), 0, ALT, Z_PORTA - CORR_LEN / 2));
+// pareti laterali
+[-1, 1].forEach(s => scene.add(mesh(new THREE.BoxGeometry(0.12, ALT, CORR_LEN), matGalleria, s * CW, ALT / 2, Z_PORTA - CORR_LEN / 2)));
+
+// quadri lungo le pareti + applique luminose
+const coloriQuadro = [0x3a5a6a, 0x6a3a4a, 0x4a5a3a, 0x6a5a2a, 0x3a3a5a, 0x5a2f3a];
+function quadroGalleria(z, lato) {
+  const g = new THREE.Group(); g.position.set(lato * (CW - 0.08), 1.55, z); g.rotation.y = -lato * Math.PI / 2; scene.add(g);
+  const w = 0.7 + Math.random() * 0.3, h = 0.55 + Math.random() * 0.35;
+  g.add(mesh(new THREE.BoxGeometry(w + 0.1, h + 0.1, 0.05), matCornice, 0, 0, 0));
+  g.add(mesh(new THREE.BoxGeometry(w + 0.16, h + 0.16, 0.03), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .6, roughness: .4 }), 0, 0, -0.015));
+  g.add(mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ color: coloriQuadro[Math.floor(Math.random() * coloriQuadro.length)], roughness: .9 }), 0, 0, 0.03));
+  // faretto
+  const sp = new THREE.SpotLight(0xfff1d0, 0.8, 4, 0.7, 0.5);
+  sp.position.set(0, 1.0, 0.4); sp.target = g; scene.add(sp.target); g.add(sp);
+}
+let zq = Z_PORTA - 1.6;
+while (zq > Z_FONDO + 1.2) { quadroGalleria(zq, -1); quadroGalleria(zq - 0.9, 1); zq -= 2.4; }
+
+// luci calde a soffitto lungo il percorso
+for (let z = Z_PORTA - 2; z > Z_FONDO + 0.5; z -= 3) {
+  const pl = new THREE.PointLight(0xffe3b0, 0.5, 6); pl.position.set(0, ALT - 0.3, z); scene.add(pl);
+  scene.add(mesh(new THREE.SphereGeometry(0.08, 10, 10), new THREE.MeshStandardMaterial({ color: 0xfff0cc, emissive: 0xffd98a, emissiveIntensity: 0.9 }), 0, ALT - 0.25, z));
+}
+
+// parete di fondo, con l'ISCRIZIONE sul muro (si vede quando la porta si apre)
+scene.add(mesh(new THREE.BoxGeometry(CW * 2 + 0.3, ALT, 0.2), matGalleria, 0, ALT / 2, Z_FONDO));
+// lastra scura + cornice dorata sul muro
+scene.add(mesh(new THREE.BoxGeometry(1.3, 0.78, 0.03), new THREE.MeshStandardMaterial({ color: 0x14140f, roughness: .6 }), 0, 1.4, Z_FONDO + 0.11));
+scene.add(mesh(new THREE.BoxGeometry(1.42, 0.9, 0.02), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .6, roughness: .4 }), 0, 1.4, Z_FONDO + 0.1));
+// iscrizione sul muro (fissa), su due righe
+const iscr = pannelloTesto("Sic mundus\ncreatus est", 1.2, '#e8cf94', true, 56);
+iscr.position.set(0, 1.4, Z_FONDO + 0.13); scene.add(iscr);
+// faretto che illumina l'iscrizione: acceso solo quando la porta è aperta
+const luceIscr = new THREE.SpotLight(0xfff1d0, 0, 7, 0.8, 0.6);
+luceIscr.position.set(0, 2.7, Z_FONDO + 1.4);
+const mira = new THREE.Object3D(); mira.position.set(0, 1.4, Z_FONDO); scene.add(mira);
+luceIscr.target = mira; scene.add(luceIscr);
+
+// stipite
+[-1, 1].forEach(s => scene.add(mesh(new THREE.BoxGeometry(0.1, 2.3, 0.26), matCornice, s * 0.82, 1.15, Z_FONDO + 0.18)));
+scene.add(mesh(new THREE.BoxGeometry(1.74, 0.12, 0.26), matCornice, 0, 2.3, Z_FONDO + 0.18));
+
+// porta finale a battente unico, SENZA scritta, davanti al muro
+const cardineFin = new THREE.Group(); cardineFin.position.set(-0.75, 0, Z_FONDO + 0.24); scene.add(cardineFin);
+const antaFinMat = new THREE.MeshStandardMaterial({ color: 0x3a2c1a, roughness: 0.55 });
+const antaFin = mesh(new THREE.BoxGeometry(1.5, 2.2, 0.08), antaFinMat, 0.75, 1.1, 0); cardineFin.add(antaFin);
+// riquadri incassati decorativi
+cardineFin.add(mesh(new THREE.BoxGeometry(1.1, 0.85, 0.03), matLegnoScuro, 0.75, 1.5, 0.05));
+cardineFin.add(mesh(new THREE.BoxGeometry(1.1, 0.6, 0.03), matLegnoScuro, 0.75, 0.55, 0.05));
+// maniglione
+cardineFin.add(mesh(new THREE.BoxGeometry(0.05, 0.32, 0.06), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .8, roughness: .3 }), 1.4, 1.1, 0.08));
+
+let finAperta = false;
+const zonaFin = mesh(new THREE.BoxGeometry(1.5, 2.2, 0.12), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.001 }), 0, 1.1, Z_FONDO + 0.26); scene.add(zonaFin);
+rendiInteractivo(zonaFin, () => {
+  finAperta = !finAperta;
+  luceIscr.intensity = finAperta ? 1.8 : 0;
+  aggiornaStato(finAperta ? "Sic mundus creatus est." : "");
+});
+
+/* ══════════════════════════════════════════
+   CONTROLLER VR
+   ══════════════════════════════════════════ */
+const tmp = new THREE.Matrix4();
+const raycaster = new THREE.Raycaster();
+const controller = [];
+function raggioMesh() {
+  const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]);
+  const l = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xe6c88a })); l.scale.z = 5; return l;
+}
+for (let i = 0; i < 2; i++) {
+  const c = renderer.xr.getController(i);
+  c.add(raggioMesh());
+  c.addEventListener('selectstart', () => azioneController(c));
+  dolly.add(c); controller.push(c);
+  const grip = renderer.xr.getControllerGrip(i);
+  grip.add(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.14), new THREE.MeshStandardMaterial({ color: 0x3a2e20, emissive: 0x20160a, emissiveIntensity: 0.4 })));
+  dolly.add(grip);
+}
+function puntaDa(o) {
+  tmp.identity().extractRotation(o.matrixWorld);
+  raycaster.ray.origin.setFromMatrixPosition(o.matrixWorld);
+  raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tmp);
+}
+function azioneController(c) {
+  puntaDa(c);
+  const hit = raycaster.intersectObjects(interattivi, false)[0];
+  if (hit && hit.distance < 6) { hit.object.userData.onSelect(); return; }
+  const suolo = raycaster.intersectObjects(pavimenti, false)[0];
+  if (suolo) teleport(suolo.point);
+}
+function teleport(p) {
+  const cam = new THREE.Vector3(); camera.getWorldPosition(cam);
+  dolly.position.x += p.x - cam.x; dolly.position.z += p.z - cam.z; risolviPos();
+}
+function risolviPos() {
+  const b = meta - 0.5;
+  let x = dolly.position.x, z = dolly.position.z;
+  const boxes = [{ x0: -b, x1: b, z0: -b, z1: b }];
+  if (portaAperta) boxes.push({ x0: -0.7, x1: 0.7, z0: Z_FONDO + 0.5, z1: -b + 0.35 });
+  const dentro = boxes.some(B => x > B.x0 && x < B.x1 && z > B.z0 && z < B.z1);
+  if (!dentro) {
+    let best = [x, z], bd = 1e9;
+    boxes.forEach(B => { const cx = Math.max(B.x0, Math.min(B.x1, x)), cz = Math.max(B.z0, Math.min(B.z1, z)); const d = (cx - x) * (cx - x) + (cz - z) * (cz - z); if (d < bd) { bd = d; best = [cx, cz]; } });
+    x = best[0]; z = best[1];
+  }
+  ingombri.forEach(r => {
+    if (x > r.minX && x < r.maxX && z > r.minZ && z < r.maxZ) {
+      const dL = x - r.minX, dR = r.maxX - x, dU = z - r.minZ, dD = r.maxZ - z, mn = Math.min(dL, dR, dU, dD);
+      if (mn === dL) x = r.minX; else if (mn === dR) x = r.maxX; else if (mn === dU) z = r.minZ; else z = r.maxZ;
+    }
+  });
+  dolly.position.x = x; dolly.position.z = z;
+}
+/* ruota il giocatore attorno alla propria testa (così non "scivola" di lato) */
+function ruotaAttornoTesta(angolo) {
+  const cam = new THREE.Vector3(); camera.getWorldPosition(cam);
+  dolly.position.sub(cam).applyAxisAngle(new THREE.Vector3(0, 1, 0), angolo).add(cam);
+  dolly.rotation.y += angolo;
+}
+/* locomozione fluida: levetta sinistra = cammina, levetta destra = gira */
+const VEL_MOV = 2.4, VEL_GIRO = 1.8;
+function locomozioneVR(dt) {
+  const s = renderer.xr.getSession(); if (!s) return;
+  for (const src of s.inputSources) {
+    if (!src.gamepad) continue;
+    const ax = src.gamepad.axes;
+    const sx = ax.length >= 4 ? ax[2] : (ax[0] || 0);
+    const sy = ax.length >= 4 ? ax[3] : (ax[1] || 0);
+    if (src.handedness === 'right') {
+      if (Math.abs(sx) > 0.15) ruotaAttornoTesta(-sx * VEL_GIRO * dt);
+    } else {   // 'left' o non specificata
+      if (Math.abs(sx) < 0.15 && Math.abs(sy) < 0.15) continue;
+      const dir = new THREE.Vector3(); camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
+      const destra = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0));
+      dolly.position.addScaledVector(dir, -sy * VEL_MOV * dt);
+      dolly.position.addScaledVector(destra, sx * VEL_MOV * dt);
+      risolviPos();
+    }
+  }
+}
+function evidenzia() {
+  interattivi.forEach(m => { if ('emBase' in m.userData) m.material.emissiveIntensity = m.userData.emBase; });
+  if (!renderer.xr.isPresenting) return;
+  controller.forEach(c => { puntaDa(c); const hit = raycaster.intersectObjects(interattivi, false)[0]; if (hit && hit.distance < 6 && 'emBase' in hit.object.userData) hit.object.material.emissiveIntensity = 1.0; });
+}
+
+/* ══════════════════════════════════════════
+   CONTROLLI PC
+   ══════════════════════════════════════════ */
+let yaw = Math.PI, pitch = 0, trascina = false, mx = 0, my = 0; const tasti = {};
+const cvEl = renderer.domElement;
+cvEl.addEventListener('mousedown', e => { trascina = true; mx = e.clientX; my = e.clientY; });
+addEventListener('mouseup', () => trascina = false);
+addEventListener('mousemove', e => { if (!trascina || renderer.xr.isPresenting) return; yaw -= (e.clientX - mx) * .004; pitch -= (e.clientY - my) * .004; pitch = Math.max(-1.2, Math.min(1.2, pitch)); mx = e.clientX; my = e.clientY; });
+addEventListener('keydown', e => tasti[e.code] = true);
+addEventListener('keyup', e => tasti[e.code] = false);
+cvEl.addEventListener('click', e => {
+  if (renderer.xr.isPresenting) return;
+  const m = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(m, camera);
+  const hit = raycaster.intersectObjects(interattivi, false)[0]; if (hit) hit.object.userData.onSelect();
+});
+
+/* ══════════════════════════════════════════
+   CONTROLLI SMARTPHONE: joystick + sguardo a trascinamento + tocco + giroscopio
+   ══════════════════════════════════════════ */
+let joyX = 0, joyY = 0, joyId = null, joyCx = 0, joyCy = 0; const joyR = 46;
+let lookId = null, lookX = 0, lookY = 0, lookMoved = 0, lookT = 0;
+const joyEl = document.getElementById('joy'), joyKnob = document.getElementById('joyKnob'), gyroBtn = document.getElementById('gyroBtn');
+const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+if (isTouch) { joyEl.style.display = 'block'; gyroBtn.style.display = 'block'; }
+
+function aggiornaJoy(t) {
+  let dx = t.clientX - joyCx, dy = t.clientY - joyCy; const d = Math.hypot(dx, dy);
+  if (d > joyR) { dx *= joyR / d; dy *= joyR / d; }
+  joyX = dx / joyR; joyY = dy / joyR;
+  joyKnob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+}
+function tocca(px, py) {
+  const m = new THREE.Vector2((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(m, camera);
+  const hit = raycaster.intersectObjects(interattivi, false)[0]; if (hit) hit.object.userData.onSelect();
+}
+cvEl.addEventListener('touchstart', e => {
+  for (const t of e.changedTouches) {
+    if (joyId === null && t.clientX < innerWidth * 0.5) {
+      joyId = t.identifier; const r = joyEl.getBoundingClientRect();
+      joyCx = r.left + r.width / 2; joyCy = r.top + r.height / 2; aggiornaJoy(t);
+    } else if (lookId === null) {
+      lookId = t.identifier; lookX = t.clientX; lookY = t.clientY; lookMoved = 0; lookT = performance.now();
+    }
+  }
+}, { passive: true });
+cvEl.addEventListener('touchmove', e => {
+  for (const t of e.changedTouches) {
+    if (t.identifier === joyId) aggiornaJoy(t);
+    else if (t.identifier === lookId && !gyroOn) {
+      const dx = t.clientX - lookX, dy = t.clientY - lookY;
+      yaw -= dx * 0.006; pitch -= dy * 0.006; pitch = Math.max(-1.2, Math.min(1.2, pitch));
+      lookMoved += Math.abs(dx) + Math.abs(dy); lookX = t.clientX; lookY = t.clientY;
+    }
+  }
+}, { passive: true });
+cvEl.addEventListener('touchend', e => {
+  for (const t of e.changedTouches) {
+    if (t.identifier === joyId) { joyId = null; joyX = joyY = 0; joyKnob.style.transform = 'translate(0,0)'; }
+    else if (t.identifier === lookId) {
+      if (lookMoved < 12 && performance.now() - lookT < 300) tocca(t.clientX, t.clientY);
+      lookId = null;
+    }
+  }
+}, { passive: true });
+
+/* giroscopio (opzionale): muovere il telefono ruota la vista */
+let gyroOn = false;
+gyroBtn.addEventListener('click', async () => {
+  if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission) {
+    try { if (await DeviceOrientationEvent.requestPermission() !== 'granted') { aggiornaStato('Permesso sensore negato'); return; } }
+    catch (e) { aggiornaStato('Giroscopio non disponibile'); return; }
+  }
+  gyroOn = !gyroOn; gyroBtn.textContent = gyroOn ? 'Giroscopio: ON' : 'Giroscopio';
+});
+addEventListener('deviceorientation', e => {
+  if (!gyroOn || e.alpha == null) return;
+  const o = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+  yaw = Math.PI + (-e.alpha + (o === 90 ? 90 : o === -90 ? -90 : 0)) * Math.PI / 180;
+  pitch = Math.max(-1.2, Math.min(1.2, (e.beta - 90) * Math.PI / 180 * -1));
+});
+
+function aggiornaPC(dt) {
+  if (renderer.xr.isPresenting) return;
+  dolly.rotation.y = yaw; camera.rotation.x = pitch;
+  const dir = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)), destra = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)), v = 2.6 * dt;
+  if (tasti['KeyW']) dolly.position.addScaledVector(dir, -v);
+  if (tasti['KeyS']) dolly.position.addScaledVector(dir, v);
+  if (tasti['KeyA']) dolly.position.addScaledVector(destra, -v);
+  if (tasti['KeyD']) dolly.position.addScaledVector(destra, v);
+  if (joyX || joyY) { dolly.position.addScaledVector(dir, joyY * v * 1.1); dolly.position.addScaledVector(destra, joyX * v * 1.1); }
+  risolviPos();
+}
+
+/* ══════════════════════════════════════════
+   STATO + LOOP
+   ══════════════════════════════════════════ */
+let timerStato;
+function aggiornaStato(t) { if (!t) return; elStato.textContent = t; elStato.style.display = 'block'; clearTimeout(timerStato); timerStato = setTimeout(() => { if (!portaAperta) elStato.style.display = 'none'; }, 4000); }
+aggiornaStato("Accendi le tre lampade e componi il codice sul tastierino della porta.");
+mostraSerratura();
+
+/* ombre: solo i solidi (MeshStandard) le proiettano e ricevono;
+   pannelli di testo, zone-click e bagliori (MeshBasic) sono esclusi */
+scene.traverse(o => {
+  if (!o.isMesh) return;
+  if (o.material && o.material.isMeshStandardMaterial) { o.castShadow = true; o.receiveShadow = true; }
+});
+pavimento.receiveShadow = true; pavimento.castShadow = false;
+
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  aggiornaPC(dt); locomozioneVR(dt); evidenzia();
+  const camPos = new THREE.Vector3(); camera.getWorldPosition(camPos);
+  pannelli.forEach(p => p.lookAt(camPos));
+  const t = performance.now() * 0.001;
+  fiamme.forEach(f => { const tr = f.base * (0.85 + 0.15 * Math.sin(t * 8 + f.seme)); f.mat.emissiveIntensity = tr; if (f.luce) f.luce.intensity = f.luceBase; });
+  cardine.rotation.y += (portaTarget - cardine.rotation.y) * 0.05;
+  cardineFin.rotation.y += ((finAperta ? -Math.PI * 0.62 : 0) - cardineFin.rotation.y) * 0.05;
+  renderer.render(scene, camera);
+});
+setTimeout(() => { elStato.textContent = "Pronto. Premi « ENTRA IN VR » o esplora col mouse."; }, 600);
+
+}
+</script>
+</body>
+</html>
